@@ -19,6 +19,7 @@ import sys
 from utils.metric import get_ner_fmeasure
 from tqdm import tqdm
 import my_utils
+from data_structure import Entity
 
 def featureCapital(word):
     if word[0].isalpha() and word[0].isupper():
@@ -595,3 +596,34 @@ def translateNCRFPPintoBioc(doc_token, predict_results, output_dir, doc_name):
     bioc_file.close()
 
 
+def translateNCRFPPintoEntities(doc_token, predict_results, doc_name):
+
+    entity_id = 1
+    results = []
+
+    sent_num = len(predict_results)
+    for idx in range(sent_num):
+        sent_length = len(predict_results[idx][0])
+        sent_token = doc_token[(doc_token['sent_idx'] == idx)]
+
+        assert sent_token.shape[0] == sent_length, "file {}, sent {}".format(doc_name, idx)
+        labelSequence = []
+
+        for idy in range(sent_length):
+            token = sent_token.iloc[idy]
+            label = predict_results[idx][0][idy]
+            labelSequence.append(label)
+
+            if label[0] == 'S' or label[0] == 'B':
+                entity = Entity()
+                entity.create(str(entity_id), label[2:], token['start'], token['end'], token['text'], idx, idy, idy)
+                results.append(entity)
+                entity_id += 1
+
+            elif label[0] == 'M' or label[0] == 'E':
+                if checkWrongState(labelSequence):
+                    entity = results[-1]
+                    entity.append(token['start'], token['end'], token['text'], idy)
+
+
+    return results

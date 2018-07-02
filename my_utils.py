@@ -369,7 +369,147 @@ def getRelationInstance2(tokens, entities, relations, names, word_vocab, postag_
     return X, Y, other
 
 
+def getRelationInstanceForOneDoc(doc_token, entities, doc_name, word_vocab, postag_vocab,
+                         relation_vocab, entity_type_vocab, entity_vocab,
+                         position_vocab1, position_vocab2, tok_num_betw_vocab, et_num_vocab):
+    X = []
+    other = []
 
+    row_num = len(entities)
+
+    for latter_idx in range(row_num):
+
+        for former_idx in range(row_num):
+
+            if former_idx < latter_idx:
+
+                former = entities[former_idx]
+                latter = entities[latter_idx]
+
+
+                if math.fabs(latter.sent_idx-former.sent_idx) >= data.sent_window:
+                    continue
+
+                # for double annotation, we don't generate instances
+                if former.start==latter.start and former.end==latter.end:
+                    continue
+
+                #type_constraint = relationConstraint(former['type'], latter['type'])
+                type_constraint = relationConstraint_chapman(former.type, latter.type)
+                if type_constraint == 0:
+                    continue
+
+                # here we retrieve all the sentences inbetween two entities, sentence of former, sentence ..., sentence of latter
+                sent_idx = former.sent_idx
+                context_token = pd.DataFrame(columns=doc_token.columns)
+                base = 0
+                former_tf_start, former_tf_end = -1, -1
+                latter_tf_start, latter_tf_end = -1, -1
+                while sent_idx <= latter.sent_idx:
+                    sentence = doc_token[(doc_token['sent_idx'] == sent_idx)]
+
+                    if former.sent_idx == sent_idx:
+                        former_tf_start, former_tf_end = base+former.tf_start, base+former.tf_end
+                    if latter.sent_idx == sent_idx:
+                        latter_tf_start, latter_tf_end = base+latter.tf_start, base+latter.tf_end
+
+                    context_token = context_token.append(sentence, ignore_index=True)
+
+                    base += len(sentence['text'])
+                    sent_idx += 1
+
+                if context_token.shape[0] > data.max_seq_len:
+                    # truncate
+                    logging.debug("exceed max_seq_len {} {}".format(doc_name, context_token.shape[0]))
+                    context_token = context_token.iloc[:data.max_seq_len]
+
+
+                words = []
+                postags = []
+                positions1 = []
+                positions2 = []
+                former_token = []
+                latter_token = []
+                i = 0
+                for _, token in context_token.iterrows():
+                    word = normalizeWord(token['text'])
+                    words.append(word_vocab.lookup(word))
+                    postags.append(postag_vocab.lookup(token['postag']))
+
+                    if i < former_tf_start:
+                        positions1.append(position_vocab1.lookup(former_tf_start - i))
+                    elif i > former_tf_end:
+                        positions1.append(position_vocab1.lookup(former_tf_end - i))
+                    else:
+                        positions1.append(position_vocab1.lookup(0))
+                        former_token.append(entity_vocab.lookup(word))
+
+                    if i < latter_tf_start:
+                        positions2.append(position_vocab2.lookup(latter_tf_start - i))
+                    elif i > latter_tf_end:
+                        positions2.append(position_vocab2.lookup(latter_tf_end - i))
+                    else:
+                        positions2.append(position_vocab2.lookup(0))
+                        latter_token.append(entity_vocab.lookup(word))
+
+                    i += 1
+
+                if len(former_token) == 0: # truncated part contains entity, so we have to use the text in doc_entity
+                    # splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", former['text'])
+                    splitted = my_tokenize(former.text)
+                    for s in splitted:
+                        s = s.strip()
+                        if s != "":
+                            former_token.append(entity_vocab.lookup(normalizeWord(s)))
+                if len(latter_token) == 0:
+                    #splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", latter['text'])
+                    splitted = my_tokenize(latter.text)
+                    for s in splitted:
+                        s = s.strip()
+                        if s != "":
+                            latter_token.append(entity_vocab.lookup(normalizeWord(s)))
+
+                assert len(former_token)>0
+                assert len(latter_token)>0
+
+
+                features = {'tokens': words, 'postag': postags, 'positions1': positions1, 'positions2': positions2}
+                if type_constraint == 1:
+                    features['e1_type'] = entity_type_vocab.lookup(former.type)
+                    features['e2_type'] = entity_type_vocab.lookup(latter.type)
+                    features['e1_token'] = former_token
+                    features['e2_token'] = latter_token
+                else:
+                    features['e1_type'] = entity_type_vocab.lookup(latter.type)
+                    features['e2_type'] = entity_type_vocab.lookup(former.type)
+                    features['e1_token'] = latter_token
+                    features['e2_token'] = former_token
+
+                features['tok_num_betw'] = tok_num_betw_vocab.lookup(latter.tf_start-former.tf_end)
+
+                entity_between = getEntitiesBetween(former, latter, entities)
+                features['et_num'] = et_num_vocab.lookup(len(entity_between))
+
+                X.append(features)
+
+                other.append((former, latter))
+
+    return X, other
+
+def getEntitiesBetween(former, latter, entities):
+    results = []
+    for entity in entities:
+        if entity.start >= former.end and entity.end <= latter.start:
+            results.append(entity)
+
+    return results
+
+def getEntities(id, entities):
+    for entity in entities:
+        if id == entity.id:
+            return entity
+
+    return None
 
 
 class RelationDataset(Dataset):
@@ -397,7 +537,11 @@ def unsorted_collate(batch):
 
 
 def my_collate(batch, sort):
-    x, y = zip(*batch)
+    if len(batch[0]) ==2 : # I made a bad hypothesis
+        x, y = zip(*batch)
+    else:
+        x = batch
+        y = None
 
     x2, x1, y = pad(x, y, data.pad_idx, sort)
 
@@ -406,7 +550,8 @@ def my_collate(batch, sort):
             x2[i] = x2[i].cuda(data.gpu)
         for i, _ in enumerate(x1):
             x1[i] = x1[i].cuda(data.gpu)
-        y = y.cuda(data.gpu)
+        if y is not None:
+            y = y.cuda(data.gpu)
     return x2, x1, y
 
 
@@ -451,7 +596,8 @@ def pad(x, y, eos_idx, sort):
 
     et_num = torch.LongTensor(et_num)
 
-    y = torch.LongTensor(y).view(-1)
+    if y:
+        y = torch.LongTensor(y).view(-1)
 
     if sort:
         # sort by length
@@ -475,13 +621,14 @@ def pad(x, y, eos_idx, sort):
 
         et_num = et_num.index_select(0, sort_idx)
 
-        y = y.index_select(0, sort_idx)
+        if y is not None:
+            y = y.index_select(0, sort_idx)
 
         return [tokens, postag, positions1, positions2, e1_token, e2_token], \
                [e1_length, e2_length, e1_type, e2_type, tok_num_betw, et_num, sort_len, sort_idx], y
     else:
         return [tokens, postag, positions1, positions2, e1_token, e2_token], \
-               [e1_length, e2_length, e1_type, e2_type, tok_num_betw, et_num, lengths], y
+               [e1_length, e2_length, e1_type, e2_type, tok_num_betw, et_num, lengths, None], y
 
 
 def pad_sequence(x, max_len, eos_idx):
@@ -520,4 +667,8 @@ def unfreeze_net(net):
         return
     for p in net.parameters():
         p.requires_grad = True
+
+
+
+
 

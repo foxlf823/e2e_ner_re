@@ -15,6 +15,7 @@ import vocab
 import my_utils
 from feature_extractor import *
 from utils.data import data
+from data_structure import *
 
 def dataset_stat(tokens, entities, relations):
     word_alphabet = sortedcontainers.SortedSet()
@@ -170,6 +171,8 @@ def train():
 
     logging.info("total training instance {}".format(len(train_Y)))
 
+    # cnnrnn
+    # my_collate = my_utils.unsorted_collate
     my_collate = my_utils.sorted_collate
 
     train_loader, train_iter = makeDatasetWithoutUnknown(train_X, train_Y, relation_vocab, True, my_collate)
@@ -185,7 +188,7 @@ def train():
                               data.HP_batch_size, shuffle=False, collate_fn=my_collate) # drop_last=True
 
 
-
+    # cnnrnn
     m_low = LSTMFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
                                                  1, data.seq_feature_size, data.HP_dropout)
     # m_low = CNNFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
@@ -212,7 +215,7 @@ def train():
     best_acc = 0.0
     logging.info("start training ...")
     for epoch in range(data.max_epoch):
-
+        m_low.train()
         m.train()
         correct, total = 0, 0
 
@@ -268,12 +271,13 @@ def train():
 
 def evaluate(feature_extractor, m, loader, other):
     #results = []
+    feature_extractor.eval()
     m.eval()
     it = iter(loader)
     start, end = 0, 0
     correct = 0
     total = 0
-    iii = 0
+    # iii = 0
     for x2, x1, targets in it:
 
 
@@ -295,16 +299,79 @@ def evaluate(feature_extractor, m, loader, other):
         end = end + targets.size(0)
 
         # we use sorted_collate, so we need to unsorted them during evaluate
+        # cnnrnn
         _, unsort_idx = sort_idx.sort(0, descending=False)
         pred = pred.index_select(0, unsort_idx)
 
         for i, d in enumerate(other[start:end]):
             d["type"] = pred[i].item()
 
-        iii += 1
+        # iii += 1
 
     acc = 100.0 * correct / total
     return acc
+
+def evaluateWhenTest(feature_extractor, m, instances, data, test_other, relationVocab):
+
+    feature_extractor.eval()
+    m.eval()
+    batch_size = data.HP_batch_size
+
+    relations = []
+    relation_id = 1
+
+    train_num = len(instances)
+    total_batch = train_num//batch_size+1
+    for batch_id in range(total_batch):
+        start = batch_id*batch_size
+        end = (batch_id+1)*batch_size
+        if end > train_num:
+            end = train_num
+        instance = instances[start:end]
+        if not instance:
+            continue
+
+        # cnnrnn
+        x2, x1, _ = my_utils.my_collate(instance, True)
+        # x2, x1, _ = my_utils.my_collate(instance, False)
+
+        with torch.no_grad():
+
+            _, _, _, _, _, _, _, sort_idx = x1
+
+            hidden_features = feature_extractor.forward(x2, x1)
+
+            outputs = m.forward(hidden_features, x2, x1)
+
+            _, pred = torch.max(outputs, 1)
+
+
+        # we use sorted_collate, so we need to unsorted them during evaluate
+        # cnnrnn
+        _, unsort_idx = sort_idx.sort(0, descending=False)
+        pred = pred.index_select(0, unsort_idx)
+
+
+
+        for i in range(start,end):
+
+            former = test_other[i][0]
+            latter = test_other[i][1]
+
+            relation_type = relationVocab.lookup_id2str(pred[i-start].item())
+            if relation_type == '<unk>':
+                continue
+            elif my_utils.relationConstraint1(relation_type, former.type, latter.type) == False:
+                continue
+            else:
+                relation = Relation()
+                relation.create(str(relation_id), relation_type, former, latter)
+                relations.append(relation)
+
+                relation_id += 1
+
+    return relations
+
 
 
 def test2(test_token, test_entity, test_relation, test_name, result_dumpdir):
