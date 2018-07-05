@@ -52,6 +52,68 @@ def dataset_stat(tokens, entities, relations):
 
     return word_alphabet, postag_alphabet, relation_alphabet, entity_type_alphabet, entity_alphabet
 
+
+
+
+
+
+def test2(test_token, test_entity, test_relation, test_name, result_dumpdir):
+    logging.info("loading ... vocab")
+    relation_vocab = pickle.load(open(os.path.join(data.pretrain, 'relation_vocab.pkl'), 'rb'))
+
+    logging.info("loading ... result")
+    results = pickle.load(open(os.path.join(data.output, 'results.pkl'), "rb"))
+
+    for i in tqdm(range(len(test_relation))):
+
+        doc_entity = test_entity[i]
+        doc_name = test_name[i]
+
+        collection = bioc.BioCCollection()
+        document = bioc.BioCDocument()
+        collection.add_document(document)
+        document.id = doc_name
+        passage = bioc.BioCPassage()
+        document.add_passage(passage)
+        passage.offset = 0
+
+        for _, entity in doc_entity.iterrows():
+            anno_entity = bioc.BioCAnnotation()
+            passage.add_annotation(anno_entity)
+            anno_entity.id = entity['id']
+            anno_entity.infons['type'] = entity['type']
+            anno_entity_location = bioc.BioCLocation(entity['start'], entity['end'] - entity['start'])
+            anno_entity.add_location(anno_entity_location)
+            anno_entity.text = entity['text']
+
+        relation_id = 1
+        for result in results:
+
+            if doc_name == result['doc_name'] :
+
+                former = doc_entity[ (doc_entity['id'] == result['former_id'])].iloc[0]
+                latter = doc_entity[(doc_entity['id'] == result['latter_id'])].iloc[0]
+
+                relation_type = relation_vocab.lookup_id2str(result['type'])
+                if relation_type == '<unk>':
+                    continue
+                elif my_utils.relationConstraint1(relation_type, former['type'], latter['type']) == False:
+                    continue
+                else:
+                    bioc_relation = bioc.BioCRelation()
+                    passage.add_relation(bioc_relation)
+                    bioc_relation.id = str(relation_id)
+                    relation_id += 1
+                    bioc_relation.infons['type'] = relation_type
+
+                    node1 = bioc.BioCNode(former['id'], 'annotation 1')
+                    bioc_relation.add_node(node1)
+                    node2 = bioc.BioCNode(latter['id'], 'annotation 2')
+                    bioc_relation.add_node(node2)
+
+        with open(os.path.join(result_dumpdir, doc_name + ".bioc.xml"), 'w') as fp:
+            bioc.dump(collection, fp)
+
 def pretrain(train_token, train_entity, train_relation, train_name, test_token, test_entity, test_relation, test_name,
              data):
     word_alphabet, postag_alphabet, relation_alphabet, entity_type_alphabet, entity_alphabet = dataset_stat(train_token, train_entity, train_relation)
@@ -71,16 +133,16 @@ def pretrain(train_token, train_entity, train_relation, train_name, test_token, 
         position_alphabet.add(i)
         position_alphabet.add(-i)
 
-    relation_vocab = vocab.Vocab(relation_alphabet, None, data.feat_config['[RELATION]']['emb_size'], data)
-    word_vocab = vocab.Vocab(word_alphabet, data.word_emb_dir, data.word_emb_dim, data)
-    postag_vocab = vocab.Vocab(postag_alphabet, None, data.feat_config['[POS]']['emb_size'], data)
-    entity_type_vocab = vocab.Vocab(entity_type_alphabet, None, data.feat_config['[ENTITY_TYPE]']['emb_size'], data)
-    entity_vocab = vocab.Vocab(entity_alphabet, None, data.feat_config['[ENTITY]']['emb_size'], data)
-    position_vocab1 = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data)
-    position_vocab2 = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data)
+    relation_vocab = vocab.Vocab(relation_alphabet, None, data.feat_config['[RELATION]']['emb_size'], data, data.feat_config['[RELATION]']['emb_norm'])
+    word_vocab = vocab.Vocab(word_alphabet, data.word_emb_dir, data.word_emb_dim, data, data.norm_word_emb)
+    postag_vocab = vocab.Vocab(postag_alphabet, None, data.feat_config['[POS]']['emb_size'], data, data.feat_config['[POS]']['emb_norm'])
+    entity_type_vocab = vocab.Vocab(entity_type_alphabet, None, data.feat_config['[ENTITY_TYPE]']['emb_size'], data, data.feat_config['[ENTITY_TYPE]']['emb_norm'])
+    entity_vocab = vocab.Vocab(entity_alphabet, None, data.feat_config['[ENTITY]']['emb_size'], data, data.feat_config['[ENTITY]']['emb_norm'])
+    position_vocab1 = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data, data.feat_config['[POSITION]']['emb_norm'])
+    position_vocab2 = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data, data.feat_config['[POSITION]']['emb_norm'])
     # we directly use position_alphabet to build them, since they are all numbers
-    tok_num_betw_vocab = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data)
-    et_num_vocab = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data)
+    tok_num_betw_vocab = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data, data.feat_config['[POSITION]']['emb_norm'])
+    et_num_vocab = vocab.Vocab(position_alphabet, None, data.feat_config['[POSITION]']['emb_size'], data, data.feat_config['[POSITION]']['emb_norm'])
     logging.info("vocab build completed")
 
     logging.info("saving ... vocab")
@@ -109,6 +171,7 @@ def pretrain(train_token, train_entity, train_relation, train_name, test_token, 
     pickle.dump(test_X, open(os.path.join(data.pretrain, 'test_X.pkl'), "wb"), True)
     pickle.dump(test_Y, open(os.path.join(data.pretrain, 'test_Y.pkl'), "wb"), True)
     pickle.dump(test_other, open(os.path.join(data.pretrain, 'test_Other.pkl'), "wb"), True)
+
 
 def makeDatasetWithoutUnknown(test_X, test_Y, relation_vocab, b_shuffle, my_collate):
     test_X_remove_unk = []
@@ -172,8 +235,11 @@ def train():
     logging.info("total training instance {}".format(len(train_Y)))
 
     # cnnrnn
-    # my_collate = my_utils.unsorted_collate
-    my_collate = my_utils.sorted_collate
+    if data.feature_extractor == 'lstm':
+        my_collate = my_utils.sorted_collate
+    else:
+        my_collate = my_utils.unsorted_collate
+
 
     train_loader, train_iter = makeDatasetWithoutUnknown(train_X, train_Y, relation_vocab, True, my_collate)
     num_iter = len(train_loader)
@@ -182,21 +248,23 @@ def train():
 
     test_X = pickle.load(open(os.path.join(data.pretrain, 'test_X.pkl'), 'rb'))
     test_Y = pickle.load(open(os.path.join(data.pretrain, 'test_Y.pkl'), 'rb'))
-    test_Other = pickle.load(open(os.path.join(data.pretrain, 'test_Other.pkl'), 'rb'))
+    # test_Other = pickle.load(open(os.path.join(data.pretrain, 'test_Other.pkl'), 'rb'))
     logging.info("total test instance {}".format(len(test_Y)))
     test_loader = DataLoader(my_utils.RelationDataset(test_X, test_Y),
                               data.HP_batch_size, shuffle=False, collate_fn=my_collate) # drop_last=True
 
 
     # cnnrnn
-    m_low = LSTMFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
+    if data.feature_extractor == 'lstm':
+        m_low = LSTMFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
                                                  1, data.seq_feature_size, data.HP_dropout)
-    # m_low = CNNFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
-    #                                         1, data.seq_feature_size,
-    #                                         3, [3,4,5], data.HP_dropout)
+    else:
+        m_low = CNNFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
+                                            1, data.seq_feature_size,
+                                            200, [3,4,5], data.HP_dropout)
 
     if torch.cuda.is_available():
-        m_low = m_low.cuda(data.gpu)
+        m_low = m_low.cuda(data.HP_gpu)
 
 
     m = MLP(data.seq_feature_size, relation_vocab, entity_type_vocab, entity_vocab, tok_num_betw_vocab,
@@ -204,7 +272,7 @@ def train():
 
 
     if torch.cuda.is_available():
-        m = m.cuda(data.gpu)
+        m = m.cuda(data.HP_gpu)
 
     iter_parameter = itertools.chain(*map(list, [m_low.parameters(), m.parameters()]))
     optimizer = optim.Adam(iter_parameter, lr=data.HP_lr)
@@ -227,6 +295,8 @@ def train():
 
             outputs = m.forward(hidden_features, x2, x1)
             loss = m.loss(targets, outputs)
+            # logging.info("output: {}".format(outputs))
+            # logging.info("loss: {}".format(loss.item()))
 
             optimizer.zero_grad()
             loss.backward()
@@ -254,7 +324,7 @@ def train():
         logging.info('epoch {} end'.format(epoch))
         logging.info('Train Accuracy: {}%'.format(100.0 * correct / total))
 
-        test_accuracy = evaluate(m_low, m, test_loader, test_Other)
+        test_accuracy = evaluate(m_low, m, test_loader, None)
         # test_accuracy = evaluate(m, test_loader)
         logging.info('Test Accuracy: {}%'.format(test_accuracy))
 
@@ -262,7 +332,7 @@ def train():
             best_acc = test_accuracy
             torch.save(m_low.state_dict(), '{}/feature_extractor.pth'.format(data.output))
             torch.save(m.state_dict(), '{}/model.pth'.format(data.output))
-            pickle.dump(test_Other, open(os.path.join(data.output, 'results.pkl'), "wb"), True)
+            # pickle.dump(test_Other, open(os.path.join(data.output, 'results.pkl'), "wb"), True)
             logging.info('New best accuracy: {}'.format(best_acc))
 
 
@@ -274,7 +344,7 @@ def evaluate(feature_extractor, m, loader, other):
     feature_extractor.eval()
     m.eval()
     it = iter(loader)
-    start, end = 0, 0
+    # start, end = 0, 0
     correct = 0
     total = 0
     # iii = 0
@@ -295,16 +365,16 @@ def evaluate(feature_extractor, m, loader, other):
             total += targets.size(0)
             correct += (pred == targets).sum().data.item()
 
-        start = end
-        end = end + targets.size(0)
+        # start = end
+        # end = end + targets.size(0)
 
         # we use sorted_collate, so we need to unsorted them during evaluate
         # cnnrnn
-        _, unsort_idx = sort_idx.sort(0, descending=False)
-        pred = pred.index_select(0, unsort_idx)
-
-        for i, d in enumerate(other[start:end]):
-            d["type"] = pred[i].item()
+        # _, unsort_idx = sort_idx.sort(0, descending=False)
+        # pred = pred.index_select(0, unsort_idx)
+        #
+        # for i, d in enumerate(other[start:end]):
+        #     d["type"] = pred[i].item()
 
         # iii += 1
 
@@ -332,8 +402,10 @@ def evaluateWhenTest(feature_extractor, m, instances, data, test_other, relation
             continue
 
         # cnnrnn
-        x2, x1, _ = my_utils.my_collate(instance, True)
-        # x2, x1, _ = my_utils.my_collate(instance, False)
+        if data.feature_extractor == 'lstm':
+            x2, x1, _ = my_utils.my_collate(instance, True)
+        else:
+            x2, x1, _ = my_utils.my_collate(instance, False)
 
         with torch.no_grad():
 
@@ -348,8 +420,9 @@ def evaluateWhenTest(feature_extractor, m, instances, data, test_other, relation
 
         # we use sorted_collate, so we need to unsorted them during evaluate
         # cnnrnn
-        _, unsort_idx = sort_idx.sort(0, descending=False)
-        pred = pred.index_select(0, unsort_idx)
+        if data.feature_extractor == 'lstm':
+            _, unsort_idx = sort_idx.sort(0, descending=False)
+            pred = pred.index_select(0, unsort_idx)
 
 
 
@@ -371,62 +444,3 @@ def evaluateWhenTest(feature_extractor, m, instances, data, test_other, relation
                 relation_id += 1
 
     return relations
-
-
-
-def test2(test_token, test_entity, test_relation, test_name, result_dumpdir):
-    logging.info("loading ... vocab")
-    relation_vocab = pickle.load(open(os.path.join(data.pretrain, 'relation_vocab.pkl'), 'rb'))
-
-    logging.info("loading ... result")
-    results = pickle.load(open(os.path.join(data.output, 'results.pkl'), "rb"))
-
-    for i in tqdm(range(len(test_relation))):
-
-        doc_entity = test_entity[i]
-        doc_name = test_name[i]
-
-        collection = bioc.BioCCollection()
-        document = bioc.BioCDocument()
-        collection.add_document(document)
-        document.id = doc_name
-        passage = bioc.BioCPassage()
-        document.add_passage(passage)
-        passage.offset = 0
-
-        for _, entity in doc_entity.iterrows():
-            anno_entity = bioc.BioCAnnotation()
-            passage.add_annotation(anno_entity)
-            anno_entity.id = entity['id']
-            anno_entity.infons['type'] = entity['type']
-            anno_entity_location = bioc.BioCLocation(entity['start'], entity['end'] - entity['start'])
-            anno_entity.add_location(anno_entity_location)
-            anno_entity.text = entity['text']
-
-        relation_id = 1
-        for result in results:
-
-            if doc_name == result['doc_name'] :
-
-                former = doc_entity[ (doc_entity['id'] == result['former_id'])].iloc[0]
-                latter = doc_entity[(doc_entity['id'] == result['latter_id'])].iloc[0]
-
-                relation_type = relation_vocab.lookup_id2str(result['type'])
-                if relation_type == '<unk>':
-                    continue
-                elif my_utils.relationConstraint1(relation_type, former['type'], latter['type']) == False:
-                    continue
-                else:
-                    bioc_relation = bioc.BioCRelation()
-                    passage.add_relation(bioc_relation)
-                    bioc_relation.id = str(relation_id)
-                    relation_id += 1
-                    bioc_relation.infons['type'] = relation_type
-
-                    node1 = bioc.BioCNode(former['id'], 'annotation 1')
-                    bioc_relation.add_node(node1)
-                    node2 = bioc.BioCNode(latter['id'], 'annotation 2')
-                    bioc_relation.add_node(node2)
-
-        with open(os.path.join(result_dumpdir, doc_name + ".bioc.xml"), 'w') as fp:
-            bioc.dump(collection, fp)

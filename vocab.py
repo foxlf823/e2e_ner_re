@@ -22,7 +22,7 @@ def _readFloat(f):
 
 class Vocab:
 
-    def __init__(self, alphabet_from_dataset, pretrained_file, emb_size, data):
+    def __init__(self, alphabet_from_dataset, pretrained_file, emb_size, data, norm):
         # add UNK with its index 0
         self.unk_tok = '<unk>'
         self.unk_idx = 0
@@ -94,7 +94,8 @@ class Vocab:
             self.embeddings = np.random.uniform(-0.01, 0.01, size=(self.vocab_size, self.emb_size))
 
         # normalize
-        self.embeddings /= np.linalg.norm(self.embeddings, axis=1).reshape(-1,1)
+        if norm:
+            self.embeddings /= np.linalg.norm(self.embeddings, axis=1).reshape(-1,1)
         # zero pad emb
         self.embeddings[self.pad_idx] = 0
 

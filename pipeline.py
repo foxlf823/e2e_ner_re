@@ -40,12 +40,11 @@ test_ner_file = os.path.join(data.test_dir, 'ner_instance.txt')
 data_file = data.model_dir + "/data"
 model_file = data.model_dir + "/model"
 output_dir = os.path.join(data.test_dir, "predicted")
-#re_output_dir = os.path.join(data.test_dir, "re_predicted")
 
 if opt.whattodo==1:
     # parsing original data into pandas
-    preprocess.preprocess(data.train_dir)
-    preprocess.preprocess(data.test_dir)
+    # preprocess.preprocess(data.train_dir)
+    # preprocess.preprocess(data.test_dir)
 
     # prepare instances
     train_token, train_entity, train_relation, train_name = preprocess.loadPreprocessData(data.train_dir)
@@ -62,25 +61,25 @@ if opt.whattodo==1:
 
 elif opt.whattodo==2:
     # step 2, train ner model
-    # if not os.path.exists(data.model_dir):
-    #     os.makedirs(data.model_dir)
-    #
-    # data.initial_feature_alphabets(train_ner_file)
-    # data.build_alphabet(train_ner_file)
-    # if data.full_data:
-    #     data.build_alphabet(test_ner_file)
-    # data.fix_alphabet()
-    #
-    # data.generate_instance('train', train_ner_file)
-    # data.generate_instance('test', test_ner_file)
-    #
-    # data.build_pretrain_emb()
-    #
-    # data.show_data_summary()
-    # save_data_name = data_file
-    # data.save(save_data_name)
-    #
-    # ner.train(data, model_file)
+    if not os.path.exists(data.model_dir):
+        os.makedirs(data.model_dir)
+
+    data.initial_feature_alphabets(train_ner_file)
+    data.build_alphabet(train_ner_file)
+    if data.full_data:
+        data.build_alphabet(test_ner_file)
+    data.fix_alphabet()
+
+    data.generate_instance('train', train_ner_file)
+    data.generate_instance('test', test_ner_file)
+
+    data.build_pretrain_emb()
+
+    data.show_data_summary()
+    save_data_name = data_file
+    data.save(save_data_name)
+
+    ner.train(data, model_file)
 
     # train relation extraction model
     if not os.path.exists(data.output):
@@ -118,23 +117,22 @@ elif opt.whattodo==3:
     et_num_vocab = pickle.load(open(os.path.join(data.pretrain, 'et_num_vocab.pkl'), 'rb'))
 
     # cnnrnn
-    m_low = feature_extractor.LSTMFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
+    if data.feature_extractor == 'lstm':
+        m_low = feature_extractor.LSTMFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
                                                  1, data.seq_feature_size, data.HP_dropout)
-    # m_low = feature_extractor.CNNFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
-    #                                         1, data.seq_feature_size,
-    #                                         3, [3,4,5], data.HP_dropout)
+    else:
+        m_low = feature_extractor.CNNFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
+                                            1, data.seq_feature_size,
+                                            200, [3,4,5], data.HP_dropout)
     if torch.cuda.is_available():
-        m_low = m_low.cuda(data.gpu)
+        m_low = m_low.cuda(data.HP_gpu)
     m = feature_extractor.MLP(data.seq_feature_size, relation_vocab, entity_type_vocab, entity_vocab, tok_num_betw_vocab,
                                      et_num_vocab)
     if torch.cuda.is_available():
-        m = m.cuda(data.gpu)
+        m = m.cuda(data.HP_gpu)
 
     m_low.load_state_dict(torch.load(os.path.join(data.output, 'feature_extractor.pth')))
     m.load_state_dict(torch.load(os.path.join(data.output, 'model.pth')))
-
-    # logging.info("loading ... result")
-    # results = pickle.load(open(os.path.join(data.output, 'results.pkl'), "rb"))
 
 
     for i in tqdm(range(len(test_name))):
@@ -201,9 +199,3 @@ elif opt.whattodo==3:
         with open(os.path.join(output_dir, doc_name + ".bioc.xml"), 'w') as fp:
             bioc.dump(collection, fp)
 
-    # if not os.path.exists(re_output_dir):
-    #     os.makedirs(re_output_dir)
-
-
-
-    # relation_extraction.test2(test_token, test_entity, test_relation, test_name, re_output_dir)

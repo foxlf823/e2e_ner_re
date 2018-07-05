@@ -36,20 +36,29 @@ class LSTMFeatureExtractor(nn.Module):
         lengths_list = lengths.tolist()
         batch_size = tokens.size(0)
 
-        tokens = self.word_emb(tokens)  # (bz, seq, emb)
-        postag = self.postag_emb(postag)
-        positions1 = self.position1_emb(positions1)
-        positions2 = self.position2_emb(positions2)
+        w = self.word_emb(tokens)  # (bz, seq, emb)
+        t = self.postag_emb(postag)
+        p1 = self.position1_emb(positions1)
+        p2 = self.position2_emb(positions2)
 
-        embeds = torch.cat((tokens, postag, positions1, positions2), 2)  # (bz, seq, ?)
 
-        packed = pack_padded_sequence(embeds, lengths_list, batch_first=True)
-        state_shape = self.n_cells, batch_size, self.hidden_size
-        h0 = c0 = embeds.new(*state_shape)
-        output, (ht, ct) = self.rnn(packed, (h0, c0))
+        embeds = torch.cat((w, t, p1, p2), 2)  # (bz, seq, ?)
 
-        unpacked_output = pad_packed_sequence(output, batch_first=True)[0]
-        return self.attn((unpacked_output, lengths))
+        # packed = pack_padded_sequence(embeds, lengths_list, batch_first=True)
+        # state_shape = self.n_cells, batch_size, self.hidden_size
+        # h0 = c0 = embeds.new(*state_shape)
+        # output, (ht, ct) = self.rnn(packed, (h0, c0))
+        # unpacked_output = pad_packed_sequence(output, batch_first=True)[0]
+
+        packed_words = pack_padded_sequence(embeds, lengths_list, batch_first=True)
+        hidden = None
+        lstm_out, hidden = self.rnn(packed_words, hidden)
+        unpacked_output, _ = pad_packed_sequence(lstm_out, batch_first=True)
+
+
+        atten = self.attn((unpacked_output, lengths))
+
+        return atten
 
 
 class DotAttentionLayer(nn.Module):
@@ -71,7 +80,7 @@ class DotAttentionLayer(nn.Module):
         # computing mask
         idxes = torch.arange(0, max_len, out=torch.LongTensor(max_len)).unsqueeze(0)
         if torch.cuda.is_available():
-            idxes = idxes.cuda(data.gpu)
+            idxes = idxes.cuda(data.HP_gpu)
         mask = (idxes<lengths.unsqueeze(1)).float()
 
         alphas = alphas * mask

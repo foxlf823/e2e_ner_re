@@ -20,6 +20,7 @@ from utils.metric import get_ner_fmeasure
 from tqdm import tqdm
 import my_utils
 from data_structure import Entity
+from utils.data import data
 
 def featureCapital(word):
     if word[0].isalpha() and word[0].isupper():
@@ -175,15 +176,15 @@ def batchify_with_label(input_batch_list, gpu, volatile_flag=False):
         _, char_seq_recover = char_perm_idx.sort(0, descending=False)
         _, word_seq_recover = word_perm_idx.sort(0, descending=False)
         if torch.cuda.is_available():
-            word_seq_tensor = word_seq_tensor.cuda(opt.gpu)
+            word_seq_tensor = word_seq_tensor.cuda(data.HP_gpu)
             for idx in range(feature_num):
-                feature_seq_tensors[idx] = feature_seq_tensors[idx].cuda(opt.gpu)
-            word_seq_lengths = word_seq_lengths.cuda(opt.gpu)
-            word_seq_recover = word_seq_recover.cuda(opt.gpu)
-            label_seq_tensor = label_seq_tensor.cuda(opt.gpu)
-            char_seq_tensor = char_seq_tensor.cuda(opt.gpu)
-            char_seq_recover = char_seq_recover.cuda(opt.gpu)
-            mask = mask.cuda(opt.gpu)
+                feature_seq_tensors[idx] = feature_seq_tensors[idx].cuda(data.HP_gpu)
+            word_seq_lengths = word_seq_lengths.cuda(data.HP_gpu)
+            word_seq_recover = word_seq_recover.cuda(data.HP_gpu)
+            label_seq_tensor = label_seq_tensor.cuda(data.HP_gpu)
+            char_seq_tensor = char_seq_tensor.cuda(data.HP_gpu)
+            char_seq_recover = char_seq_recover.cuda(data.HP_gpu)
+            mask = mask.cuda(data.HP_gpu)
         return word_seq_tensor,feature_seq_tensors, word_seq_lengths, word_seq_recover, char_seq_tensor, char_seq_lengths, char_seq_recover, label_seq_tensor, mask
 
 def lr_decay(optimizer, epoch, decay_rate, init_lr):
@@ -359,8 +360,8 @@ def train(data, model_file):
                 temp_time = time.time()
                 temp_cost = temp_time - temp_start
                 temp_start = temp_time
-                print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f" % (
-                end, temp_cost, sample_loss, right_token, whole_token, (right_token + 0.) / whole_token))
+                # print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f" % (
+                # end, temp_cost, sample_loss, right_token, whole_token, (right_token + 0.) / whole_token))
                 if sample_loss > 1e8 or str(sample_loss) == "nan":
                     print "ERROR: LOSS EXPLOSION (>1e8) ! PLEASE SET PROPER PARAMETERS AND STRUCTURE! EXIT...."
                     exit(0)
@@ -371,8 +372,8 @@ def train(data, model_file):
             model.zero_grad()
         temp_time = time.time()
         temp_cost = temp_time - temp_start
-        print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f" % (
-        end, temp_cost, sample_loss, right_token, whole_token, (right_token + 0.) / whole_token))
+        # print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f" % (
+        # end, temp_cost, sample_loss, right_token, whole_token, (right_token + 0.) / whole_token))
 
         epoch_finish = time.time()
         epoch_cost = epoch_finish - epoch_start

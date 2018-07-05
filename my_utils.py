@@ -547,11 +547,13 @@ def my_collate(batch, sort):
 
     if torch.cuda.is_available():
         for i, _ in enumerate(x2):
-            x2[i] = x2[i].cuda(data.gpu)
+            if x2[i] is not None:
+                x2[i] = x2[i].cuda(data.HP_gpu)
         for i, _ in enumerate(x1):
-            x1[i] = x1[i].cuda(data.gpu)
+            if x1[i] is not None:
+                x1[i] = x1[i].cuda(data.HP_gpu)
         if y is not None:
-            y = y.cuda(data.gpu)
+            y = y.cuda(data.HP_gpu)
     return x2, x1, y
 
 
@@ -569,6 +571,9 @@ def pad(x, y, eos_idx, sort):
 
     lengths = [len(row) for row in tokens]
     max_len = max(lengths)
+    # cnnrnn
+    if data.feature_extractor == 'cnn':
+        max_len = max(max_len, 5)
 
     # features
     tokens = pad_sequence(tokens, max_len, eos_idx)

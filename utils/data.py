@@ -113,6 +113,7 @@ class Data:
         self.unk_ratio=1
         self.seq_feature_size=256
         self.max_epoch = 100
+        self.feature_extractor=None
 
         
     def show_data_summary(self):
@@ -150,6 +151,9 @@ class Data:
             print("         Fe: %s  embedding  dir: %s"%(self.feature_alphabets[idx].name, self.feature_emb_dirs[idx]))
             print("         Fe: %s  embedding size: %s"%(self.feature_alphabets[idx].name, self.feature_emb_dims[idx]))
             print("         Fe: %s  norm       emb: %s"%(self.feature_alphabets[idx].name, self.norm_feature_embs[idx]))
+        for k, v in self.feat_config.items():
+            print("         Feature: %s, size %s, norm %s, dir %s"%(k, v['emb_size'], v['emb_norm'], v['emb_dir']))
+
         print(" "+"++"*20)
         print(" Model Network:")
         print("     Model        use_crf: %s"%(self.use_crf))
@@ -193,9 +197,10 @@ class Data:
         print("     pad index: %s" % (self.pad_idx))
         print("     sentence window: %s" % (self.sent_window))
         print("     Output directory: %s" % (self.output))
-        print("     The ratio using negative instnaces 0~1: %s" % (self.output))
+        print("     The ratio using negative instnaces 0~1: %s" % (self.unk_ratio))
         print("     Size of seqeuence feature representation: %s" % (self.seq_feature_size))
         print("     Iteration for relation training: %s" % (self.max_epoch))
+        print("     feature_extractor: %s" % (self.feature_extractor))
 
         print("DATA SUMMARY END.")
         print("++"*50)
@@ -488,6 +493,10 @@ class Data:
         the_item = 'max_epoch'
         if the_item in config:
             self.max_epoch = int(config[the_item])
+
+        the_item = 'feature_extractor'
+        if the_item in config:
+            self.feature_extractor = config[the_item]
 
 def config_file_to_dict(input_file):
     config = {}
