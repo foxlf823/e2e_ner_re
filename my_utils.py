@@ -68,448 +68,448 @@ def my_tokenize(txt):
 # 'du': set(['Duration Duration', 'Drug Duration'])
 
 
-def relationConstraint1(relation_type, type1, type2):
-
-    if relation_type=='do':
-        if (type1 == 'Drug' and type2 == 'Dose') or (type1 == 'Dose' and type2 == 'Drug') or (
-                type1 == 'Dose' and type2 == 'Dose'):
-            return True
-        else:
-            return False
-
-    elif relation_type=='fr':
-        if (type1 == 'Drug' and type2 == 'Frequency') or (type1 == 'Frequency' and type2 == 'Drug') or (
-                type1 == 'Frequency' and type2 == 'Frequency'):
-            return True
-        else:
-            return False
-    elif relation_type=='manner/route':
-        if (type1 == 'Drug' and type2 == 'Route') or (type1 == 'Route' and type2 == 'Drug') or (
-                type1 == 'Route' and type2 == 'Route'):
-            return True
-        else:
-            return False
-    elif relation_type=='Drug_By Patient':
-        if (type1 == 'Drug By' and type2 == 'Patient') or (type1 == 'Patient' and type2 == 'Drug By'):
-            return True
-        else:
-            return False
-    # cardio begin
-    elif relation_type=='severity_type':
-        if (type1 == 'Indication' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'Indication') or \
-                (type1 == 'ADE' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'ADE') or \
-                (type1 == 'SSLIF' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'SSLIF') \
-                or (type1 == 'Bleeding' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'Bleeding') \
-                or (type1 == 'BleedingLabEval' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'BleedingLabEval') \
-                or (type1 == 'Severity' and type2 == 'Severity'):
-            return True
-        else:
-            return False
-    # cardio end
-    elif relation_type=='adverse':
-        if (type1 == 'Drug' and type2 == 'ADE') or (type1 == 'ADE' and type2 == 'Drug') or \
-                (type1 == 'SSLIF' and type2 == 'ADE') or (type1 == 'ADE' and type2 == 'SSLIF') \
-                or (type1 == 'ADE' and type2 == 'ADE'):
-            return True
-        else:
-            return False
-    elif relation_type=='reason':
-        if (type1 == 'Drug' and type2 == 'Indication') or (type1 == 'Indication' and type2 == 'Drug') or (
-                type1 == 'Indication' and type2 == 'Indication'):
-            return True
-        else:
-            return False
-    elif relation_type=='Drug_By Physician':
-        if (type1 == 'Drug By' and type2 == 'Physician') or (type1 == 'Physician' and type2 == 'Drug By'):
-            return True
-        else:
-            return False
-    elif relation_type=='du':
-        if (type1 == 'Drug' and type2 == 'Duration') or (type1 == 'Duration' and type2 == 'Drug') or (
-                type1 == 'Duration' and type2 == 'Duration'):
-            return True
-        else:
-            return False
-    # cardio begin
-    elif relation_type=='Bleeding_BleedingAnatomicSite':
-        if (type1 == 'Bleeding' and type2 == 'BleedingAnatomicSite') or (type1 == 'BleedingAnatomicSite' and type2 == 'Bleeding'):
-            return True
-        else:
-            return False
-    # cardio end
-    else:
-        raise RuntimeError("unknown relation type {}".format(relation_type))
-
-
-def relationConstraint_chapman(type1, type2): # determine whether the constraint are satisfied, non-directional
-
-    if (type1 == 'Drug' and type2 == 'Dose'):
-        return 1
-    elif (type1 == 'Dose' and type2 == 'Drug'):
-        return -1
-    elif (type1 == 'Drug' and type2 == 'Frequency'):
-        return 1
-    elif (type1 == 'Frequency' and type2 == 'Drug'):
-        return -1
-    elif (type1 == 'Drug' and type2 == 'Route'):
-        return 1
-    elif (type1 == 'Route' and type2 == 'Drug'):
-        return -1
-    elif (type1 == 'Drug By' and type2 == 'Patient'):
-        return 1
-    elif (type1 == 'Patient' and type2 == 'Drug By'):
-        return -1
-    elif (type1 == 'Indication' and type2 == 'Severity') or (type1 == 'ADE' and type2 == 'Severity') or (type1 == 'SSLIF' and type2 == 'Severity'):
-        return 1
-    elif (type1 == 'Severity' and type2 == 'Indication') or (type1 == 'Severity' and type2 == 'ADE') or (type1 == 'Severity' and type2 == 'SSLIF'):
-        return -1
-    elif (type1 == 'Drug' and type2 == 'ADE'):
-        return 1
-    elif (type1 == 'ADE' and type2 == 'Drug'):
-        return -1
-    elif (type1 == 'Drug' and type2 == 'Indication'):
-        return 1
-    elif (type1 == 'Indication' and type2 == 'Drug'):
-        return -1
-    elif (type1 == 'Drug By' and type2 == 'Physician'):
-        return 1
-    elif (type1 == 'Physician' and type2 == 'Drug By'):
-        return -1
-    elif (type1 == 'Drug' and type2 == 'Duration'):
-        return 1
-    elif (type1 == 'Duration' and type2 == 'Drug'):
-        return -1
-    # cardio begin
-    # cardio annotation are not all consistent with made
-    elif (type1 == 'Bleeding' and type2 == 'Severity'):
-        return 1
-    elif (type1 == 'Severity' and type2 == 'Bleeding'):
-        return -1
-    elif (type1 == 'BleedingLabEval' and type2 == 'Severity'):
-        return 1
-    elif (type1 == 'Severity' and type2 == 'BleedingLabEval'):
-        return -1
-    elif (type1 == 'Bleeding' and type2 == 'BleedingAnatomicSite'):
-        return 1
-    elif (type1 == 'BleedingAnatomicSite' and type2 == 'Bleeding'):
-        return -1
-    # cardio end
-    else:
-        return 0
-
-
-
-
-# truncate before feature
-def getRelationInstance2(tokens, entities, relations, names, word_vocab, postag_vocab,
-                         relation_vocab, entity_type_vocab, entity_vocab,
-                         position_vocab1, position_vocab2, tok_num_betw_vocab, et_num_vocab):
-    X = []
-    Y = []
-    other = [] # other is used for outputing results, it's usually used for test set
-    cnt_neg = 0
-
-    for i in tqdm(range(len(relations))):
-
-        doc_relation = relations[i]
-        doc_token = tokens[i]
-        doc_entity = entities[i] # entity are sorted by start offset
-        doc_name = names[i]
-
-        row_num = doc_entity.shape[0]
-
-        for latter_idx in range(row_num):
-
-            for former_idx in range(row_num):
-
-                if former_idx < latter_idx:
-
-                    former = doc_entity.iloc[former_idx]
-                    latter = doc_entity.iloc[latter_idx]
-
-
-                    if math.fabs(latter['sent_idx']-former['sent_idx']) >= data.sent_window:
-                        continue
-
-                    # for double annotation, we don't generate instances
-                    if former['start']==latter['start'] and former['end']==latter['end']:
-                        continue
-
-                    #type_constraint = relationConstraint(former['type'], latter['type'])
-                    type_constraint = relationConstraint_chapman(former['type'], latter['type'])
-                    if type_constraint == 0:
-                        continue
-
-                    gold_relations = doc_relation[
-                        (
-                                ((doc_relation['entity1_id'] == former['id']) & (
-                                            doc_relation['entity2_id'] == latter['id']))
-                                |
-                                ((doc_relation['entity1_id'] == latter['id']) & (
-                                            doc_relation['entity2_id'] == former['id']))
-                        )
-                    ]
-                    if gold_relations.shape[0] > 1:
-                        #raise RuntimeError("the same entity pair has more than one relations")
-                        logging.debug("entity {} and {} has more than one relations".format(former['id'], latter['id']))
-                        continue
-
-                    # here we retrieve all the sentences inbetween two entities, sentence of former, sentence ..., sentence of latter
-                    sent_idx = former['sent_idx']
-                    context_token = pd.DataFrame(columns=doc_token.columns)
-                    base = 0
-                    former_tf_start, former_tf_end = -1, -1
-                    latter_tf_start, latter_tf_end = -1, -1
-                    while sent_idx <= latter['sent_idx']:
-                        sentence = doc_token[(doc_token['sent_idx'] == sent_idx)]
-
-                        if former['sent_idx'] == sent_idx:
-                            former_tf_start, former_tf_end = base+former['tf_start'], base+former['tf_end']
-                        if latter['sent_idx'] == sent_idx:
-                            latter_tf_start, latter_tf_end = base+latter['tf_start'], base+latter['tf_end']
-
-                        context_token = context_token.append(sentence, ignore_index=True)
-
-                        base += len(sentence['text'])
-                        sent_idx += 1
-
-                    if context_token.shape[0] > data.max_seq_len:
-                        # truncate
-                        logging.debug("exceed max_seq_len {} {}".format(doc_name, context_token.shape[0]))
-                        context_token = context_token.iloc[:data.max_seq_len]
-
-
-                    words = []
-                    postags = []
-                    positions1 = []
-                    positions2 = []
-                    former_token = []
-                    latter_token = []
-                    i = 0
-                    for _, token in context_token.iterrows():
-                        word = normalizeWord(token['text'])
-                        words.append(word_vocab.lookup(word))
-                        postags.append(postag_vocab.lookup(token['postag']))
-
-                        if i < former_tf_start:
-                            positions1.append(position_vocab1.lookup(former_tf_start - i))
-                        elif i > former_tf_end:
-                            positions1.append(position_vocab1.lookup(former_tf_end - i))
-                        else:
-                            positions1.append(position_vocab1.lookup(0))
-                            former_token.append(entity_vocab.lookup(word))
-
-                        if i < latter_tf_start:
-                            positions2.append(position_vocab2.lookup(latter_tf_start - i))
-                        elif i > latter_tf_end:
-                            positions2.append(position_vocab2.lookup(latter_tf_end - i))
-                        else:
-                            positions2.append(position_vocab2.lookup(0))
-                            latter_token.append(entity_vocab.lookup(word))
-
-                        i += 1
-
-                    if len(former_token) == 0: # truncated part contains entity, so we have to use the text in doc_entity
-                        # splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", former['text'])
-                        splitted = my_tokenize(former['text'])
-                        for s in splitted:
-                            s = s.strip()
-                            if s != "":
-                                former_token.append(entity_vocab.lookup(normalizeWord(s)))
-                    if len(latter_token) == 0:
-                        #splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", latter['text'])
-                        splitted = my_tokenize(latter['text'])
-                        for s in splitted:
-                            s = s.strip()
-                            if s != "":
-                                latter_token.append(entity_vocab.lookup(normalizeWord(s)))
-
-                    assert len(former_token)>0
-                    assert len(latter_token)>0
-
-
-                    features = {'tokens': words, 'postag': postags, 'positions1': positions1, 'positions2': positions2}
-                    if type_constraint == 1:
-                        features['e1_type'] = entity_type_vocab.lookup(former['type'])
-                        features['e2_type'] = entity_type_vocab.lookup(latter['type'])
-                        features['e1_token'] = former_token
-                        features['e2_token'] = latter_token
-                    else:
-                        features['e1_type'] = entity_type_vocab.lookup(latter['type'])
-                        features['e2_type'] = entity_type_vocab.lookup(former['type'])
-                        features['e1_token'] = latter_token
-                        features['e2_token'] = former_token
-
-                    features['tok_num_betw'] = tok_num_betw_vocab.lookup(latter['tf_start']-former['tf_end'])
-
-                    entity_between = doc_entity[((doc_entity['start']>=former['end']) & (doc_entity['end']<=latter['start']))]
-                    features['et_num'] = et_num_vocab.lookup(entity_between.shape[0])
-
-                    X.append(features)
-
-                    if gold_relations.shape[0] == 0:
-                        Y.append(relation_vocab.lookup('<unk>'))
-                        cnt_neg += 1
-                    else:
-                        gold_answer = gold_relations.iloc[0]['type']
-                        Y.append(relation_vocab.lookup(gold_answer))
-
-                    other_info = {}
-                    other_info['doc_name'] = doc_name
-                    other_info['former_id'] = former['id']
-                    other_info['latter_id'] = latter['id']
-                    other.append(other_info)
-
-
-
-
-    neg = 100.0*cnt_neg/len(Y)
-
-    logging.info("positive instance {}%, negative instance {}%".format(100-neg, neg))
-    return X, Y, other
-
-
-def getRelationInstanceForOneDoc(doc_token, entities, doc_name, word_vocab, postag_vocab,
-                         relation_vocab, entity_type_vocab, entity_vocab,
-                         position_vocab1, position_vocab2, tok_num_betw_vocab, et_num_vocab):
-    X = []
-    other = []
-
-    row_num = len(entities)
-
-    for latter_idx in range(row_num):
-
-        for former_idx in range(row_num):
-
-            if former_idx < latter_idx:
-
-                former = entities[former_idx]
-                latter = entities[latter_idx]
-
-
-                if math.fabs(latter.sent_idx-former.sent_idx) >= data.sent_window:
-                    continue
-
-                # for double annotation, we don't generate instances
-                if former.start==latter.start and former.end==latter.end:
-                    continue
-
-                #type_constraint = relationConstraint(former['type'], latter['type'])
-                type_constraint = relationConstraint_chapman(former.type, latter.type)
-                if type_constraint == 0:
-                    continue
-
-                # here we retrieve all the sentences inbetween two entities, sentence of former, sentence ..., sentence of latter
-                sent_idx = former.sent_idx
-                context_token = pd.DataFrame(columns=doc_token.columns)
-                base = 0
-                former_tf_start, former_tf_end = -1, -1
-                latter_tf_start, latter_tf_end = -1, -1
-                while sent_idx <= latter.sent_idx:
-                    sentence = doc_token[(doc_token['sent_idx'] == sent_idx)]
-
-                    if former.sent_idx == sent_idx:
-                        former_tf_start, former_tf_end = base+former.tf_start, base+former.tf_end
-                    if latter.sent_idx == sent_idx:
-                        latter_tf_start, latter_tf_end = base+latter.tf_start, base+latter.tf_end
-
-                    context_token = context_token.append(sentence, ignore_index=True)
-
-                    base += len(sentence['text'])
-                    sent_idx += 1
-
-                if context_token.shape[0] > data.max_seq_len:
-                    # truncate
-                    logging.debug("exceed max_seq_len {} {}".format(doc_name, context_token.shape[0]))
-                    context_token = context_token.iloc[:data.max_seq_len]
-
-
-                words = []
-                postags = []
-                positions1 = []
-                positions2 = []
-                former_token = []
-                latter_token = []
-                i = 0
-                for _, token in context_token.iterrows():
-                    word = normalizeWord(token['text'])
-                    words.append(word_vocab.lookup(word))
-                    postags.append(postag_vocab.lookup(token['postag']))
-
-                    if i < former_tf_start:
-                        positions1.append(position_vocab1.lookup(former_tf_start - i))
-                    elif i > former_tf_end:
-                        positions1.append(position_vocab1.lookup(former_tf_end - i))
-                    else:
-                        positions1.append(position_vocab1.lookup(0))
-                        former_token.append(entity_vocab.lookup(word))
-
-                    if i < latter_tf_start:
-                        positions2.append(position_vocab2.lookup(latter_tf_start - i))
-                    elif i > latter_tf_end:
-                        positions2.append(position_vocab2.lookup(latter_tf_end - i))
-                    else:
-                        positions2.append(position_vocab2.lookup(0))
-                        latter_token.append(entity_vocab.lookup(word))
-
-                    i += 1
-
-                if len(former_token) == 0: # truncated part contains entity, so we have to use the text in doc_entity
-                    # splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", former['text'])
-                    splitted = my_tokenize(former.text)
-                    for s in splitted:
-                        s = s.strip()
-                        if s != "":
-                            former_token.append(entity_vocab.lookup(normalizeWord(s)))
-                if len(latter_token) == 0:
-                    #splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", latter['text'])
-                    splitted = my_tokenize(latter.text)
-                    for s in splitted:
-                        s = s.strip()
-                        if s != "":
-                            latter_token.append(entity_vocab.lookup(normalizeWord(s)))
-
-                assert len(former_token)>0
-                assert len(latter_token)>0
-
-
-                features = {'tokens': words, 'postag': postags, 'positions1': positions1, 'positions2': positions2}
-                if type_constraint == 1:
-                    features['e1_type'] = entity_type_vocab.lookup(former.type)
-                    features['e2_type'] = entity_type_vocab.lookup(latter.type)
-                    features['e1_token'] = former_token
-                    features['e2_token'] = latter_token
-                else:
-                    features['e1_type'] = entity_type_vocab.lookup(latter.type)
-                    features['e2_type'] = entity_type_vocab.lookup(former.type)
-                    features['e1_token'] = latter_token
-                    features['e2_token'] = former_token
-
-                features['tok_num_betw'] = tok_num_betw_vocab.lookup(latter.tf_start-former.tf_end)
-
-                entity_between = getEntitiesBetween(former, latter, entities)
-                features['et_num'] = et_num_vocab.lookup(len(entity_between))
-
-                X.append(features)
-
-                other.append((former, latter))
-
-    return X, other
-
-def getEntitiesBetween(former, latter, entities):
-    results = []
-    for entity in entities:
-        if entity.start >= former.end and entity.end <= latter.start:
-            results.append(entity)
-
-    return results
-
-def getEntities(id, entities):
-    for entity in entities:
-        if id == entity.id:
-            return entity
-
-    return None
+# def relationConstraint1(relation_type, type1, type2):
+#
+#     if relation_type=='do':
+#         if (type1 == 'Drug' and type2 == 'Dose') or (type1 == 'Dose' and type2 == 'Drug') or (
+#                 type1 == 'Dose' and type2 == 'Dose'):
+#             return True
+#         else:
+#             return False
+#
+#     elif relation_type=='fr':
+#         if (type1 == 'Drug' and type2 == 'Frequency') or (type1 == 'Frequency' and type2 == 'Drug') or (
+#                 type1 == 'Frequency' and type2 == 'Frequency'):
+#             return True
+#         else:
+#             return False
+#     elif relation_type=='manner/route':
+#         if (type1 == 'Drug' and type2 == 'Route') or (type1 == 'Route' and type2 == 'Drug') or (
+#                 type1 == 'Route' and type2 == 'Route'):
+#             return True
+#         else:
+#             return False
+#     elif relation_type=='Drug_By Patient':
+#         if (type1 == 'Drug By' and type2 == 'Patient') or (type1 == 'Patient' and type2 == 'Drug By'):
+#             return True
+#         else:
+#             return False
+#     # cardio begin
+#     elif relation_type=='severity_type':
+#         if (type1 == 'Indication' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'Indication') or \
+#                 (type1 == 'ADE' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'ADE') or \
+#                 (type1 == 'SSLIF' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'SSLIF') \
+#                 or (type1 == 'Bleeding' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'Bleeding') \
+#                 or (type1 == 'BleedingLabEval' and type2 == 'Severity') or (type1 == 'Severity' and type2 == 'BleedingLabEval') \
+#                 or (type1 == 'Severity' and type2 == 'Severity'):
+#             return True
+#         else:
+#             return False
+#     # cardio end
+#     elif relation_type=='adverse':
+#         if (type1 == 'Drug' and type2 == 'ADE') or (type1 == 'ADE' and type2 == 'Drug') or \
+#                 (type1 == 'SSLIF' and type2 == 'ADE') or (type1 == 'ADE' and type2 == 'SSLIF') \
+#                 or (type1 == 'ADE' and type2 == 'ADE'):
+#             return True
+#         else:
+#             return False
+#     elif relation_type=='reason':
+#         if (type1 == 'Drug' and type2 == 'Indication') or (type1 == 'Indication' and type2 == 'Drug') or (
+#                 type1 == 'Indication' and type2 == 'Indication'):
+#             return True
+#         else:
+#             return False
+#     elif relation_type=='Drug_By Physician':
+#         if (type1 == 'Drug By' and type2 == 'Physician') or (type1 == 'Physician' and type2 == 'Drug By'):
+#             return True
+#         else:
+#             return False
+#     elif relation_type=='du':
+#         if (type1 == 'Drug' and type2 == 'Duration') or (type1 == 'Duration' and type2 == 'Drug') or (
+#                 type1 == 'Duration' and type2 == 'Duration'):
+#             return True
+#         else:
+#             return False
+#     # cardio begin
+#     elif relation_type=='Bleeding_BleedingAnatomicSite':
+#         if (type1 == 'Bleeding' and type2 == 'BleedingAnatomicSite') or (type1 == 'BleedingAnatomicSite' and type2 == 'Bleeding'):
+#             return True
+#         else:
+#             return False
+#     # cardio end
+#     else:
+#         raise RuntimeError("unknown relation type {}".format(relation_type))
+
+
+# def relationConstraint_chapman(type1, type2): # determine whether the constraint are satisfied, non-directional
+#
+#     if (type1 == 'Drug' and type2 == 'Dose'):
+#         return 1
+#     elif (type1 == 'Dose' and type2 == 'Drug'):
+#         return -1
+#     elif (type1 == 'Drug' and type2 == 'Frequency'):
+#         return 1
+#     elif (type1 == 'Frequency' and type2 == 'Drug'):
+#         return -1
+#     elif (type1 == 'Drug' and type2 == 'Route'):
+#         return 1
+#     elif (type1 == 'Route' and type2 == 'Drug'):
+#         return -1
+#     elif (type1 == 'Drug By' and type2 == 'Patient'):
+#         return 1
+#     elif (type1 == 'Patient' and type2 == 'Drug By'):
+#         return -1
+#     elif (type1 == 'Indication' and type2 == 'Severity') or (type1 == 'ADE' and type2 == 'Severity') or (type1 == 'SSLIF' and type2 == 'Severity'):
+#         return 1
+#     elif (type1 == 'Severity' and type2 == 'Indication') or (type1 == 'Severity' and type2 == 'ADE') or (type1 == 'Severity' and type2 == 'SSLIF'):
+#         return -1
+#     elif (type1 == 'Drug' and type2 == 'ADE'):
+#         return 1
+#     elif (type1 == 'ADE' and type2 == 'Drug'):
+#         return -1
+#     elif (type1 == 'Drug' and type2 == 'Indication'):
+#         return 1
+#     elif (type1 == 'Indication' and type2 == 'Drug'):
+#         return -1
+#     elif (type1 == 'Drug By' and type2 == 'Physician'):
+#         return 1
+#     elif (type1 == 'Physician' and type2 == 'Drug By'):
+#         return -1
+#     elif (type1 == 'Drug' and type2 == 'Duration'):
+#         return 1
+#     elif (type1 == 'Duration' and type2 == 'Drug'):
+#         return -1
+#     # cardio begin
+#     # cardio annotation are not all consistent with made
+#     elif (type1 == 'Bleeding' and type2 == 'Severity'):
+#         return 1
+#     elif (type1 == 'Severity' and type2 == 'Bleeding'):
+#         return -1
+#     elif (type1 == 'BleedingLabEval' and type2 == 'Severity'):
+#         return 1
+#     elif (type1 == 'Severity' and type2 == 'BleedingLabEval'):
+#         return -1
+#     elif (type1 == 'Bleeding' and type2 == 'BleedingAnatomicSite'):
+#         return 1
+#     elif (type1 == 'BleedingAnatomicSite' and type2 == 'Bleeding'):
+#         return -1
+#     # cardio end
+#     else:
+#         return 0
+#
+#
+#
+#
+# # truncate before feature
+# def getRelationInstance2(tokens, entities, relations, names, word_vocab, postag_vocab,
+#                          relation_vocab, entity_type_vocab, entity_vocab,
+#                          position_vocab1, position_vocab2, tok_num_betw_vocab, et_num_vocab):
+#     X = []
+#     Y = []
+#     other = [] # other is used for outputing results, it's usually used for test set
+#     cnt_neg = 0
+#
+#     for i in tqdm(range(len(relations))):
+#
+#         doc_relation = relations[i]
+#         doc_token = tokens[i]
+#         doc_entity = entities[i] # entity are sorted by start offset
+#         doc_name = names[i]
+#
+#         row_num = doc_entity.shape[0]
+#
+#         for latter_idx in range(row_num):
+#
+#             for former_idx in range(row_num):
+#
+#                 if former_idx < latter_idx:
+#
+#                     former = doc_entity.iloc[former_idx]
+#                     latter = doc_entity.iloc[latter_idx]
+#
+#
+#                     if math.fabs(latter['sent_idx']-former['sent_idx']) >= data.sent_window:
+#                         continue
+#
+#                     # for double annotation, we don't generate instances
+#                     if former['start']==latter['start'] and former['end']==latter['end']:
+#                         continue
+#
+#                     #type_constraint = relationConstraint(former['type'], latter['type'])
+#                     type_constraint = relationConstraint_chapman(former['type'], latter['type'])
+#                     if type_constraint == 0:
+#                         continue
+#
+#                     gold_relations = doc_relation[
+#                         (
+#                                 ((doc_relation['entity1_id'] == former['id']) & (
+#                                             doc_relation['entity2_id'] == latter['id']))
+#                                 |
+#                                 ((doc_relation['entity1_id'] == latter['id']) & (
+#                                             doc_relation['entity2_id'] == former['id']))
+#                         )
+#                     ]
+#                     if gold_relations.shape[0] > 1:
+#                         #raise RuntimeError("the same entity pair has more than one relations")
+#                         logging.debug("entity {} and {} has more than one relations".format(former['id'], latter['id']))
+#                         continue
+#
+#                     # here we retrieve all the sentences inbetween two entities, sentence of former, sentence ..., sentence of latter
+#                     sent_idx = former['sent_idx']
+#                     context_token = pd.DataFrame(columns=doc_token.columns)
+#                     base = 0
+#                     former_tf_start, former_tf_end = -1, -1
+#                     latter_tf_start, latter_tf_end = -1, -1
+#                     while sent_idx <= latter['sent_idx']:
+#                         sentence = doc_token[(doc_token['sent_idx'] == sent_idx)]
+#
+#                         if former['sent_idx'] == sent_idx:
+#                             former_tf_start, former_tf_end = base+former['tf_start'], base+former['tf_end']
+#                         if latter['sent_idx'] == sent_idx:
+#                             latter_tf_start, latter_tf_end = base+latter['tf_start'], base+latter['tf_end']
+#
+#                         context_token = context_token.append(sentence, ignore_index=True)
+#
+#                         base += len(sentence['text'])
+#                         sent_idx += 1
+#
+#                     if context_token.shape[0] > data.max_seq_len:
+#                         # truncate
+#                         logging.debug("exceed max_seq_len {} {}".format(doc_name, context_token.shape[0]))
+#                         context_token = context_token.iloc[:data.max_seq_len]
+#
+#
+#                     words = []
+#                     postags = []
+#                     positions1 = []
+#                     positions2 = []
+#                     former_token = []
+#                     latter_token = []
+#                     i = 0
+#                     for _, token in context_token.iterrows():
+#                         word = normalizeWord(token['text'])
+#                         words.append(word_vocab.lookup(word))
+#                         postags.append(postag_vocab.lookup(token['postag']))
+#
+#                         if i < former_tf_start:
+#                             positions1.append(position_vocab1.lookup(former_tf_start - i))
+#                         elif i > former_tf_end:
+#                             positions1.append(position_vocab1.lookup(former_tf_end - i))
+#                         else:
+#                             positions1.append(position_vocab1.lookup(0))
+#                             former_token.append(entity_vocab.lookup(word))
+#
+#                         if i < latter_tf_start:
+#                             positions2.append(position_vocab2.lookup(latter_tf_start - i))
+#                         elif i > latter_tf_end:
+#                             positions2.append(position_vocab2.lookup(latter_tf_end - i))
+#                         else:
+#                             positions2.append(position_vocab2.lookup(0))
+#                             latter_token.append(entity_vocab.lookup(word))
+#
+#                         i += 1
+#
+#                     if len(former_token) == 0: # truncated part contains entity, so we have to use the text in doc_entity
+#                         # splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", former['text'])
+#                         splitted = my_tokenize(former['text'])
+#                         for s in splitted:
+#                             s = s.strip()
+#                             if s != "":
+#                                 former_token.append(entity_vocab.lookup(normalizeWord(s)))
+#                     if len(latter_token) == 0:
+#                         #splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", latter['text'])
+#                         splitted = my_tokenize(latter['text'])
+#                         for s in splitted:
+#                             s = s.strip()
+#                             if s != "":
+#                                 latter_token.append(entity_vocab.lookup(normalizeWord(s)))
+#
+#                     assert len(former_token)>0
+#                     assert len(latter_token)>0
+#
+#
+#                     features = {'tokens': words, 'postag': postags, 'positions1': positions1, 'positions2': positions2}
+#                     if type_constraint == 1:
+#                         features['e1_type'] = entity_type_vocab.lookup(former['type'])
+#                         features['e2_type'] = entity_type_vocab.lookup(latter['type'])
+#                         features['e1_token'] = former_token
+#                         features['e2_token'] = latter_token
+#                     else:
+#                         features['e1_type'] = entity_type_vocab.lookup(latter['type'])
+#                         features['e2_type'] = entity_type_vocab.lookup(former['type'])
+#                         features['e1_token'] = latter_token
+#                         features['e2_token'] = former_token
+#
+#                     features['tok_num_betw'] = tok_num_betw_vocab.lookup(latter['tf_start']-former['tf_end'])
+#
+#                     entity_between = doc_entity[((doc_entity['start']>=former['end']) & (doc_entity['end']<=latter['start']))]
+#                     features['et_num'] = et_num_vocab.lookup(entity_between.shape[0])
+#
+#                     X.append(features)
+#
+#                     if gold_relations.shape[0] == 0:
+#                         Y.append(relation_vocab.lookup('<unk>'))
+#                         cnt_neg += 1
+#                     else:
+#                         gold_answer = gold_relations.iloc[0]['type']
+#                         Y.append(relation_vocab.lookup(gold_answer))
+#
+#                     other_info = {}
+#                     other_info['doc_name'] = doc_name
+#                     other_info['former_id'] = former['id']
+#                     other_info['latter_id'] = latter['id']
+#                     other.append(other_info)
+#
+#
+#
+#
+#     neg = 100.0*cnt_neg/len(Y)
+#
+#     logging.info("positive instance {}%, negative instance {}%".format(100-neg, neg))
+#     return X, Y, other
+
+
+# def getRelationInstanceForOneDoc(doc_token, entities, doc_name, word_vocab, postag_vocab,
+#                          relation_vocab, entity_type_vocab, entity_vocab,
+#                          position_vocab1, position_vocab2, tok_num_betw_vocab, et_num_vocab):
+#     X = []
+#     other = []
+#
+#     row_num = len(entities)
+#
+#     for latter_idx in range(row_num):
+#
+#         for former_idx in range(row_num):
+#
+#             if former_idx < latter_idx:
+#
+#                 former = entities[former_idx]
+#                 latter = entities[latter_idx]
+#
+#
+#                 if math.fabs(latter.sent_idx-former.sent_idx) >= data.sent_window:
+#                     continue
+#
+#                 # for double annotation, we don't generate instances
+#                 if former.start==latter.start and former.end==latter.end:
+#                     continue
+#
+#                 #type_constraint = relationConstraint(former['type'], latter['type'])
+#                 type_constraint = relationConstraint_chapman(former.type, latter.type)
+#                 if type_constraint == 0:
+#                     continue
+#
+#                 # here we retrieve all the sentences inbetween two entities, sentence of former, sentence ..., sentence of latter
+#                 sent_idx = former.sent_idx
+#                 context_token = pd.DataFrame(columns=doc_token.columns)
+#                 base = 0
+#                 former_tf_start, former_tf_end = -1, -1
+#                 latter_tf_start, latter_tf_end = -1, -1
+#                 while sent_idx <= latter.sent_idx:
+#                     sentence = doc_token[(doc_token['sent_idx'] == sent_idx)]
+#
+#                     if former.sent_idx == sent_idx:
+#                         former_tf_start, former_tf_end = base+former.tf_start, base+former.tf_end
+#                     if latter.sent_idx == sent_idx:
+#                         latter_tf_start, latter_tf_end = base+latter.tf_start, base+latter.tf_end
+#
+#                     context_token = context_token.append(sentence, ignore_index=True)
+#
+#                     base += len(sentence['text'])
+#                     sent_idx += 1
+#
+#                 if context_token.shape[0] > data.max_seq_len:
+#                     # truncate
+#                     logging.debug("exceed max_seq_len {} {}".format(doc_name, context_token.shape[0]))
+#                     context_token = context_token.iloc[:data.max_seq_len]
+#
+#
+#                 words = []
+#                 postags = []
+#                 positions1 = []
+#                 positions2 = []
+#                 former_token = []
+#                 latter_token = []
+#                 i = 0
+#                 for _, token in context_token.iterrows():
+#                     word = normalizeWord(token['text'])
+#                     words.append(word_vocab.lookup(word))
+#                     postags.append(postag_vocab.lookup(token['postag']))
+#
+#                     if i < former_tf_start:
+#                         positions1.append(position_vocab1.lookup(former_tf_start - i))
+#                     elif i > former_tf_end:
+#                         positions1.append(position_vocab1.lookup(former_tf_end - i))
+#                     else:
+#                         positions1.append(position_vocab1.lookup(0))
+#                         former_token.append(entity_vocab.lookup(word))
+#
+#                     if i < latter_tf_start:
+#                         positions2.append(position_vocab2.lookup(latter_tf_start - i))
+#                     elif i > latter_tf_end:
+#                         positions2.append(position_vocab2.lookup(latter_tf_end - i))
+#                     else:
+#                         positions2.append(position_vocab2.lookup(0))
+#                         latter_token.append(entity_vocab.lookup(word))
+#
+#                     i += 1
+#
+#                 if len(former_token) == 0: # truncated part contains entity, so we have to use the text in doc_entity
+#                     # splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", former['text'])
+#                     splitted = my_tokenize(former.text)
+#                     for s in splitted:
+#                         s = s.strip()
+#                         if s != "":
+#                             former_token.append(entity_vocab.lookup(normalizeWord(s)))
+#                 if len(latter_token) == 0:
+#                     #splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", latter['text'])
+#                     splitted = my_tokenize(latter.text)
+#                     for s in splitted:
+#                         s = s.strip()
+#                         if s != "":
+#                             latter_token.append(entity_vocab.lookup(normalizeWord(s)))
+#
+#                 assert len(former_token)>0
+#                 assert len(latter_token)>0
+#
+#
+#                 features = {'tokens': words, 'postag': postags, 'positions1': positions1, 'positions2': positions2}
+#                 if type_constraint == 1:
+#                     features['e1_type'] = entity_type_vocab.lookup(former.type)
+#                     features['e2_type'] = entity_type_vocab.lookup(latter.type)
+#                     features['e1_token'] = former_token
+#                     features['e2_token'] = latter_token
+#                 else:
+#                     features['e1_type'] = entity_type_vocab.lookup(latter.type)
+#                     features['e2_type'] = entity_type_vocab.lookup(former.type)
+#                     features['e1_token'] = latter_token
+#                     features['e2_token'] = former_token
+#
+#                 features['tok_num_betw'] = tok_num_betw_vocab.lookup(latter.tf_start-former.tf_end)
+#
+#                 entity_between = getEntitiesBetween(former, latter, entities)
+#                 features['et_num'] = et_num_vocab.lookup(len(entity_between))
+#
+#                 X.append(features)
+#
+#                 other.append((former, latter))
+#
+#     return X, other
+
+# def getEntitiesBetween(former, latter, entities):
+#     results = []
+#     for entity in entities:
+#         if entity.start >= former.end and entity.end <= latter.start:
+#             results.append(entity)
+#
+#     return results
+#
+# def getEntities(id, entities):
+#     for entity in entities:
+#         if id == entity.id:
+#             return entity
+#
+#     return None
 
 
 class RelationDataset(Dataset):
@@ -672,6 +672,14 @@ def unfreeze_net(net):
         return
     for p in net.parameters():
         p.requires_grad = True
+
+
+def random_embedding(vocab_size, embedding_dim):
+    pretrain_emb = np.empty([vocab_size, embedding_dim])
+    scale = np.sqrt(3.0 / embedding_dim)
+    for index in range(vocab_size):
+        pretrain_emb[index,:] = np.random.uniform(-scale, scale, [1, embedding_dim])
+    return pretrain_emb
 
 
 

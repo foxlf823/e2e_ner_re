@@ -37,103 +37,92 @@ logging.info(opt)
 
 train_ner_file = os.path.join(data.train_dir, 'ner_instance.txt')
 test_ner_file = os.path.join(data.test_dir, 'ner_instance.txt')
-data_file = data.model_dir + "/data"
-model_file = data.model_dir + "/model"
-output_dir = os.path.join(data.test_dir, "predicted")
+predict_dir = os.path.join(data.test_dir, "predicted")
+if not os.path.exists(predict_dir):
+    os.makedirs(predict_dir)
+
+if not os.path.exists(opt.ner_dir):
+    os.makedirs(opt.ner_dir)
+if not os.path.exists(opt.re_dir):
+    os.makedirs(opt.re_dir)
 
 if opt.whattodo==1:
     # parsing original data into pandas
     # preprocess.preprocess(data.train_dir)
     # preprocess.preprocess(data.test_dir)
 
-    # prepare instances
+    # ner
+    # generate crf++ style data
     train_token, train_entity, train_relation, train_name = preprocess.loadPreprocessData(data.train_dir)
     ner.generateData(train_token, train_entity, train_name, train_ner_file)
-
     test_token, test_entity, test_relation, test_name = preprocess.loadPreprocessData(data.test_dir)
     ner.generateData(test_token, test_entity, test_name, test_ner_file)
-
-    if not os.path.exists(data.pretrain):
-        os.makedirs(data.pretrain)
-
-    relation_extraction.pretrain(train_token, train_entity, train_relation, train_name, test_token, test_entity, test_relation,
-                          test_name, data)
-
-elif opt.whattodo==2:
-    # step 2, train ner model
-    if not os.path.exists(data.model_dir):
-        os.makedirs(data.model_dir)
-
+    # build alphabet
     data.initial_feature_alphabets(train_ner_file)
     data.build_alphabet(train_ner_file)
     if data.full_data:
         data.build_alphabet(test_ner_file)
     data.fix_alphabet()
-
+    # generate instance
     data.generate_instance('train', train_ner_file)
     data.generate_instance('test', test_ner_file)
-
+    # build emb
     data.build_pretrain_emb()
 
+    # re
+    # generate alphabet
+    data.initial_re_feature_alphabets()
+    data.build_re_feature_alphabets(train_token, train_entity, train_relation)
+    if data.full_data:
+        data.build_re_feature_alphabets(test_token, test_entity, test_relation)
+    data.fix_re_alphabet()
+    # generate instance
+    data.generate_re_instance('train', train_token, train_entity, train_relation, train_name)
+    data.generate_re_instance('test', test_token, test_entity, test_relation, test_name)
+    # build emb
+    data.build_re_pretrain_emb()
+
     data.show_data_summary()
-    save_data_name = data_file
-    data.save(save_data_name)
+    data.save(opt.data_file)
 
-    ner.train(data, model_file)
+elif opt.whattodo==2:
+    # train ner model
+    data.load(opt.data_file)
+    data.HP_iteration = opt.ner_iter
+    data.max_epoch = opt.re_iter
 
-    # train relation extraction model
-    if not os.path.exists(data.output):
-        os.makedirs(data.output)
+    data.show_data_summary()
 
+    ner.train(data, opt.ner_dir)
 
-    relation_extraction.train()
+    relation_extraction.train(data, opt.re_dir)
 
 elif opt.whattodo==3:
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
     test_token, test_entity, test_relation, test_name = preprocess.loadPreprocessData(data.test_dir)
 
-    # step 3, evaluate on test data and output results in bioc format, one doc one file
+    # evaluate on test data and output results in bioc format, one doc one file
 
-    data.load(data_file)
+    data.load(opt.data_file)
     data.MAX_SENTENCE_LENGTH = -1
     data.show_data_summary()
 
     data.fix_alphabet()
     model = SeqModel(data)
-    model.load_state_dict(torch.load(model_file))
-
-    logging.info("loading ... vocab")
-    word_vocab = pickle.load(open(os.path.join(data.pretrain, 'word_vocab.pkl'), 'rb'))
-    postag_vocab = pickle.load(open(os.path.join(data.pretrain, 'postag_vocab.pkl'), 'rb'))
-    relation_vocab = pickle.load(open(os.path.join(data.pretrain, 'relation_vocab.pkl'), 'rb'))
-    entity_type_vocab = pickle.load(open(os.path.join(data.pretrain, 'entity_type_vocab.pkl'), 'rb'))
-    entity_vocab = pickle.load(open(os.path.join(data.pretrain, 'entity_vocab.pkl'), 'rb'))
-    position_vocab1 = pickle.load(open(os.path.join(data.pretrain, 'position_vocab1.pkl'), 'rb'))
-    position_vocab2 = pickle.load(open(os.path.join(data.pretrain, 'position_vocab2.pkl'), 'rb'))
-    tok_num_betw_vocab = pickle.load(open(os.path.join(data.pretrain, 'tok_num_betw_vocab.pkl'), 'rb'))
-    et_num_vocab = pickle.load(open(os.path.join(data.pretrain, 'et_num_vocab.pkl'), 'rb'))
+    model.load_state_dict(torch.load(os.path.join(opt.ner_dir, 'model.pkl')))
 
     # cnnrnn
     if data.feature_extractor == 'lstm':
-        m_low = feature_extractor.LSTMFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
-                                                 1, data.seq_feature_size, data.HP_dropout)
-    else:
-        m_low = feature_extractor.CNNFeatureExtractor(word_vocab, postag_vocab, position_vocab1, position_vocab2,
-                                            1, data.seq_feature_size,
-                                            200, [3,4,5], data.HP_dropout)
+        m_low = feature_extractor.LSTMFeatureExtractor(data, 1, data.seq_feature_size, data.HP_dropout, data.HP_gpu)
     if torch.cuda.is_available():
         m_low = m_low.cuda(data.HP_gpu)
-    m = feature_extractor.MLP(data.seq_feature_size, relation_vocab, entity_type_vocab, entity_vocab, tok_num_betw_vocab,
-                                     et_num_vocab)
+
+    m = feature_extractor.MLP(data.seq_feature_size, data)
     if torch.cuda.is_available():
         m = m.cuda(data.HP_gpu)
 
-    m_low.load_state_dict(torch.load(os.path.join(data.output, 'feature_extractor.pth')))
-    m.load_state_dict(torch.load(os.path.join(data.output, 'model.pth')))
-
+    m_low.load_state_dict(torch.load(os.path.join(opt.re_dir, 'feature_extractor.pth')))
+    m.load_state_dict(torch.load(os.path.join(opt.re_dir, 'model.pth')))
 
     for i in tqdm(range(len(test_name))):
         doc_name = test_name[i]
@@ -176,13 +165,9 @@ elif opt.whattodo==3:
 
 
 
-        test_X, test_other = my_utils.getRelationInstanceForOneDoc(doc_token, entities, doc_name,
-                                                                   word_vocab, postag_vocab,
-                                                                   relation_vocab, entity_type_vocab,
-                                                                   entity_vocab, position_vocab1, position_vocab2,
-                                                                   tok_num_betw_vocab, et_num_vocab)
+        test_X, test_other = relation_extraction.getRelationInstanceForOneDoc(doc_token, entities, doc_name, data)
 
-        relations = relation_extraction.evaluateWhenTest(m_low, m, test_X, data, test_other, relation_vocab)
+        relations = relation_extraction.evaluateWhenTest(m_low, m, test_X, data, test_other, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']])
 
         for relation in relations:
             bioc_relation = bioc.BioCRelation()
@@ -196,6 +181,6 @@ elif opt.whattodo==3:
             bioc_relation.add_node(node2)
 
 
-        with open(os.path.join(output_dir, doc_name + ".bioc.xml"), 'w') as fp:
+        with open(os.path.join(predict_dir, doc_name + ".bioc.xml"), 'w') as fp:
             bioc.dump(collection, fp)
 

@@ -402,7 +402,7 @@ def train(data, model_file):
             else:
                 print "Exceed previous best acc score:", best_dev
 
-            model_name = model_file
+            model_name = os.path.join(model_file, 'model.pkl')
             torch.save(model.state_dict(), model_name)
             best_dev = current_score
 

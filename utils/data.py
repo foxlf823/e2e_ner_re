@@ -9,7 +9,8 @@ from alphabet import Alphabet
 from functions import *
 import cPickle as pickle
 from options import opt
-
+import my_utils
+import relation_extraction
 
 START = "</s>"
 UNKNOWN = "</unk>"
@@ -29,6 +30,7 @@ class Data:
         self.feature_alphabets = []
         self.feature_num = len(self.feature_alphabets)
         self.feat_config = None
+        self.feature_name2id = {}
 
 
         self.label_alphabet = Alphabet('label',True)
@@ -115,6 +117,19 @@ class Data:
         self.max_epoch = 100
         self.feature_extractor=None
 
+        self.re_feature_name = []
+        self.re_feature_name2id = {}
+        self.re_feature_alphabets = []
+        self.re_feature_num = len(self.re_feature_alphabets)
+        self.re_feat_config = None
+
+        self.re_train_X = []
+        self.re_dev_X = []
+        self.re_test_X = []
+        self.re_train_Y = []
+        self.re_dev_Y = []
+        self.re_test_Y = []
+
         
     def show_data_summary(self):
         print("++"*50)
@@ -151,8 +166,8 @@ class Data:
             print("         Fe: %s  embedding  dir: %s"%(self.feature_alphabets[idx].name, self.feature_emb_dirs[idx]))
             print("         Fe: %s  embedding size: %s"%(self.feature_alphabets[idx].name, self.feature_emb_dims[idx]))
             print("         Fe: %s  norm       emb: %s"%(self.feature_alphabets[idx].name, self.norm_feature_embs[idx]))
-        for k, v in self.feat_config.items():
-            print("         Feature: %s, size %s, norm %s, dir %s"%(k, v['emb_size'], v['emb_norm'], v['emb_dir']))
+        # for k, v in self.feat_config.items():
+        #     print("         Feature: %s, size %s, norm %s, dir %s"%(k, v['emb_size'], v['emb_norm'], v['emb_dir']))
 
         print(" "+"++"*20)
         print(" Model Network:")
@@ -202,6 +217,17 @@ class Data:
         print("     Iteration for relation training: %s" % (self.max_epoch))
         print("     feature_extractor: %s" % (self.feature_extractor))
 
+        print("     RE FEATURE num: %s"%(self.re_feature_num))
+        for idx in range(self.re_feature_num):
+            print("         Fe: %s  alphabet  size: %s"%(self.re_feature_alphabets[idx].name, self.re_feature_alphabet_sizes[idx]))
+            print("         Fe: %s  embedding  dir: %s"%(self.re_feature_alphabets[idx].name, self.re_feature_emb_dirs[idx]))
+            print("         Fe: %s  embedding size: %s"%(self.re_feature_alphabets[idx].name, self.re_feature_emb_dims[idx]))
+            print("         Fe: %s  norm       emb: %s"%(self.re_feature_alphabets[idx].name, self.re_norm_feature_embs[idx]))
+
+        print("     RE Train instance number: %s"%(len(self.re_train_Y)))
+        print("     RE Dev   instance number: %s"%(len(self.re_dev_Y)))
+        print("     RE Test  instance number: %s"%(len(self.re_test_Y)))
+
         print("DATA SUMMARY END.")
         print("++"*50)
         sys.stdout.flush()
@@ -211,10 +237,13 @@ class Data:
         items = open(input_file,'r').readline().strip('\n').split()
         total_column = len(items)
         if total_column > 2:
+            id = 0
             for idx in range(1, total_column-1):
                 feature_prefix = items[idx].split(']',1)[0]+"]"
                 self.feature_alphabets.append(Alphabet(feature_prefix))
                 self.feature_name.append(feature_prefix)
+                self.feature_name2id[feature_prefix] = id
+                id += 1
                 print "Find feature: ", feature_prefix 
         self.feature_num = len(self.feature_alphabets)
         self.pretrain_feature_embeddings = [None]*self.feature_num
@@ -272,7 +301,78 @@ class Data:
         self.char_alphabet.close()
         self.label_alphabet.close() 
         for idx in range(self.feature_num):
-            self.feature_alphabets[idx].close()      
+            self.feature_alphabets[idx].close()
+
+    def initial_re_feature_alphabets(self):
+        id = 0
+        for k, v in self.re_feat_config.items():
+            self.re_feature_alphabets.append(Alphabet(k))
+            self.re_feature_name.append(k)
+            self.re_feature_name2id[k] = id
+            id += 1
+
+        self.re_feature_num = len(self.re_feature_alphabets)
+        self.re_pretrain_feature_embeddings = [None]*self.re_feature_num
+        self.re_feature_emb_dims = [20]*self.re_feature_num
+        self.re_feature_emb_dirs = [None]*self.re_feature_num
+        self.re_norm_feature_embs = [False]*self.re_feature_num
+        self.re_feature_alphabet_sizes = [0]*self.re_feature_num
+        if self.re_feat_config:
+            for idx in range(self.re_feature_num):
+                if self.re_feature_name[idx] in self.re_feat_config:
+                    self.re_feature_emb_dims[idx] = self.re_feat_config[self.re_feature_name[idx]]['emb_size']
+                    self.re_feature_emb_dirs[idx] = self.re_feat_config[self.re_feature_name[idx]]['emb_dir']
+                    self.re_norm_feature_embs[idx] = self.re_feat_config[self.re_feature_name[idx]]['emb_norm']
+
+
+    def build_re_feature_alphabets(self, tokens, entities, relations):
+
+        entity_type_alphabet = self.re_feature_alphabets[self.re_feature_name2id['[ENTITY_TYPE]']]
+        entity_alphabet = self.re_feature_alphabets[self.re_feature_name2id['[ENTITY]']]
+        relation_alphabet = self.re_feature_alphabets[self.re_feature_name2id['[RELATION]']]
+        token_num_alphabet = self.re_feature_alphabets[self.re_feature_name2id['[TOKEN_NUM]']]
+        entity_num_alphabet = self.re_feature_alphabets[self.re_feature_name2id['[ENTITY_NUM]']]
+        position_alphabet = self.re_feature_alphabets[self.re_feature_name2id['[POSITION]']]
+
+        for i, doc_token in enumerate(tokens):
+
+            doc_entity = entities[i]
+            doc_relation = relations[i]
+
+            sent_idx = 0
+            sentence = doc_token[(doc_token['sent_idx'] == sent_idx)]
+            while sentence.shape[0] != 0:
+
+                entities_in_sentence = doc_entity[(doc_entity['sent_idx'] == sent_idx)]
+                for _, entity in entities_in_sentence.iterrows():
+                    entity_type_alphabet.add(entity['type'])
+                    tk_idx = entity['tf_start']
+                    while tk_idx <= entity['tf_end']:
+                        entity_alphabet.add(
+                            my_utils.normalizeWord(sentence.iloc[tk_idx, 0]))  # assume 'text' is in 0 column
+                        tk_idx += 1
+
+                sent_idx += 1
+                sentence = doc_token[(doc_token['sent_idx'] == sent_idx)]
+
+            for _, relation in doc_relation.iterrows():
+                relation_alphabet.add(relation['type'])
+
+
+        for i in range(data.max_seq_len):
+            token_num_alphabet.add(i)
+            entity_num_alphabet.add(i)
+            position_alphabet.add(i)
+            position_alphabet.add(-i)
+
+
+        for idx in range(self.re_feature_num):
+            self.re_feature_alphabet_sizes[idx] = self.re_feature_alphabets[idx].size()
+
+
+    def fix_re_alphabet(self):
+        for alphabet in self.re_feature_alphabets:
+            alphabet.close()
 
 
     def build_pretrain_emb(self):
@@ -287,6 +387,13 @@ class Data:
                 print("Load pretrained feature %s embedding:, norm: %s, dir: %s"%(self.feature_name[idx], self.norm_feature_embs[idx], self.feature_emb_dirs[idx]))
                 self.pretrain_feature_embeddings[idx], self.feature_emb_dims[idx] = build_pretrain_embedding(self.feature_emb_dirs[idx], self.feature_alphabets[idx], self.feature_emb_dims[idx], self.norm_feature_embs[idx])
 
+    def build_re_pretrain_emb(self):
+        for idx in range(self.re_feature_num):
+            if self.re_feature_emb_dirs[idx]:
+                print("Load pretrained re feature %s embedding:, norm: %s, dir: %s" % (self.re_feature_name[idx], self.re_norm_feature_embs[idx], self.re_feature_emb_dirs[idx]))
+                self.re_pretrain_feature_embeddings[idx], self.re_feature_emb_dims[idx] = build_pretrain_embedding(
+                    self.re_feature_emb_dirs[idx], self.re_feature_alphabets[idx], self.re_feature_emb_dims[idx],
+                    self.re_norm_feature_embs[idx])
 
     def generate_instance(self, name, input_file):
         self.fix_alphabet()
@@ -300,6 +407,17 @@ class Data:
             print("Error: you can only generate train/dev/test instance! Illegal input:%s"%(name))
 
 
+
+    def generate_re_instance(self, name, tokens, entities, relations, names):
+        self.fix_re_alphabet()
+        if name == "train":
+            self.re_train_X, self.re_train_Y = relation_extraction.getRelationInstance2(tokens, entities, relations, names, self)
+        elif name == "dev":
+            self.re_dev_X, self.re_dev_Y = relation_extraction.getRelationInstance2(tokens, entities, relations, names, self)
+        elif name == "test":
+            self.re_test_X, self.re_test_Y = relation_extraction.getRelationInstance2(tokens, entities, relations, names, self)
+        else:
+            print("Error: you can only generate train/dev/test instance! Illegal input:%s"%(name))
 
 
     def load(self,data_file):
@@ -498,6 +616,11 @@ class Data:
         if the_item in config:
             self.feature_extractor = config[the_item]
 
+        the_item = 're_feature'
+        if the_item in config:
+            self.re_feat_config = config[the_item] ## feat_config is a dict
+
+
 def config_file_to_dict(input_file):
     config = {}
     fins = open(input_file,'r').readlines()
@@ -507,7 +630,7 @@ def config_file_to_dict(input_file):
         if "=" in line:
             pair = line.strip().split('#',1)[0].split('=',1)
             item = pair[0]
-            if item=="feature":
+            if item=="feature" or item=='re_feature':
                 if item not in config:
                     feat_dict = {}
                     config[item]= feat_dict 

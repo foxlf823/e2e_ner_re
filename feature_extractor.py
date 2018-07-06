@@ -2,32 +2,52 @@ import torch
 import torch.nn.functional as functional
 from torch import autograd, nn
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
-from utils.data import data
+import my_utils
 
 
 class LSTMFeatureExtractor(nn.Module):
     def __init__(self,
-                 word_vocab, postag_vocab, position1_vocab, position2_vocab,
+                 data,
                  num_layers,
                  hidden_size,
-                 dropout):
+                 dropout, gpu):
         super(LSTMFeatureExtractor, self).__init__()
         self.num_layers = num_layers
 
         self.hidden_size = hidden_size // 2
         self.n_cells = self.num_layers * 2
 
-        self.word_emb = word_vocab.init_embed_layer()
-        self.postag_emb = postag_vocab.init_embed_layer()
-        self.position1_emb = position1_vocab.init_embed_layer()
-        self.position2_emb = position2_vocab.init_embed_layer()
+        self.word_emb = nn.Embedding(data.word_alphabet.size(), data.word_emb_dim, data.pad_idx)
+        if data.pretrain_word_embedding is not None:
+            self.word_emb.weight.data.copy_(torch.from_numpy(data.pretrain_word_embedding))
+        else:
+            self.word_emb.weight.data.copy_(torch.from_numpy(my_utils.random_embedding(data.word_alphabet.size(), data.word_emb_dim)))
 
-        self.input_size = word_vocab.emb_size + postag_vocab.emb_size + position1_vocab.emb_size + position2_vocab.emb_size
+        postag_alphabet_id = data.feature_name2id['[POS]']
+        self.postag_emb = nn.Embedding(data.feature_alphabets[postag_alphabet_id].size(), data.feature_emb_dims[postag_alphabet_id], data.pad_idx)
+        self.postag_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.feature_alphabets[postag_alphabet_id].size(), data.feature_emb_dims[postag_alphabet_id])))
+
+        position_alphabet_id = data.re_feature_name2id['[POSITION]']
+        self.position1_emb = nn.Embedding(data.re_feature_alphabets[position_alphabet_id].size(),
+                                       data.re_feature_emb_dims[position_alphabet_id], data.pad_idx)
+        self.position1_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[position_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[position_alphabet_id])))
+
+        self.position2_emb = nn.Embedding(data.re_feature_alphabets[position_alphabet_id].size(),
+                                       data.re_feature_emb_dims[position_alphabet_id], data.pad_idx)
+        self.position2_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[position_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[position_alphabet_id])))
+
+
+        self.input_size = data.word_emb_dim + data.feature_emb_dims[postag_alphabet_id] + 2*data.re_feature_emb_dims[position_alphabet_id]
 
         self.rnn = nn.LSTM(input_size=self.input_size, hidden_size=self.hidden_size,
                            num_layers=num_layers, dropout=dropout, bidirectional=True)
 
-        self.attn = DotAttentionLayer(hidden_size)
+        self.attn = DotAttentionLayer(hidden_size, gpu)
 
     def forward(self, x2, x1):
         tokens, postag, positions1, positions2, e1_token, e2_token = x2
@@ -62,10 +82,11 @@ class LSTMFeatureExtractor(nn.Module):
 
 
 class DotAttentionLayer(nn.Module):
-    def __init__(self, hidden_size):
+    def __init__(self, hidden_size, gpu):
         super(DotAttentionLayer, self).__init__()
         self.hidden_size = hidden_size
         self.W = nn.Linear(hidden_size, 1, bias=False)
+        self.gpu = gpu
 
     def forward(self, input):
         """
@@ -80,7 +101,7 @@ class DotAttentionLayer(nn.Module):
         # computing mask
         idxes = torch.arange(0, max_len, out=torch.LongTensor(max_len)).unsqueeze(0)
         if torch.cuda.is_available():
-            idxes = idxes.cuda(data.HP_gpu)
+            idxes = idxes.cuda(self.gpu)
         mask = (idxes<lengths.unsqueeze(1)).float()
 
         alphas = alphas * mask
@@ -91,24 +112,44 @@ class DotAttentionLayer(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, context_feature_size, relation_vocab, entity_type_vocab, entity_vocab,  tok_num_betw_vocab,
-                                         et_num_vocab):
+    def __init__(self, context_feature_size, data):
         super(MLP, self).__init__()
 
-        self.entity_type_emb = entity_type_vocab.init_embed_layer()
+        entity_type_alphabet_id = data.re_feature_name2id['[ENTITY_TYPE]']
+        self.entity_type_emb = nn.Embedding(data.re_feature_alphabets[entity_type_alphabet_id].size(),
+                                       data.re_feature_emb_dims[entity_type_alphabet_id], data.pad_idx)
+        self.entity_type_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[entity_type_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[entity_type_alphabet_id])))
 
-        self.entity_emb = entity_vocab.init_embed_layer()
+        entity_alphabet_id = data.re_feature_name2id['[ENTITY]']
+        self.entity_emb = nn.Embedding(data.re_feature_alphabets[entity_alphabet_id].size(),
+                                       data.re_feature_emb_dims[entity_alphabet_id], data.pad_idx)
+        self.entity_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[entity_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[entity_alphabet_id])))
 
-        self.dot_att = DotAttentionLayer(entity_vocab.emb_size)
+        self.dot_att = DotAttentionLayer(data.re_feature_emb_dims[entity_alphabet_id], data.HP_gpu)
 
-        self.tok_num_betw_emb = tok_num_betw_vocab.init_embed_layer()
+        tok_num_alphabet_id = data.re_feature_name2id['[TOKEN_NUM]']
+        self.tok_num_betw_emb = nn.Embedding(data.re_feature_alphabets[tok_num_alphabet_id].size(),
+                                       data.re_feature_emb_dims[tok_num_alphabet_id], data.pad_idx)
+        self.tok_num_betw_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[tok_num_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[tok_num_alphabet_id])))
 
-        self.et_num_emb = et_num_vocab.init_embed_layer()
+        et_num_alphabet_id = data.re_feature_name2id['[ENTITY_NUM]']
+        self.et_num_emb = nn.Embedding(data.re_feature_alphabets[et_num_alphabet_id].size(),
+                                       data.re_feature_emb_dims[et_num_alphabet_id], data.pad_idx)
+        self.et_num_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[et_num_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[et_num_alphabet_id])))
 
-        self.input_size = context_feature_size + 2 * entity_type_vocab.emb_size + 2 * entity_vocab.emb_size + \
-                          tok_num_betw_vocab.emb_size + et_num_vocab.emb_size
+        self.input_size = context_feature_size + 2 * data.re_feature_emb_dims[entity_type_alphabet_id] + 2 * data.re_feature_emb_dims[entity_alphabet_id] + \
+                          data.re_feature_emb_dims[tok_num_alphabet_id] + data.re_feature_emb_dims[et_num_alphabet_id]
 
-        self.linear = nn.Linear(self.input_size, relation_vocab.vocab_size, bias=False)
+        relation_alphabet_id = data.re_feature_name2id['[RELATION]']
+        self.linear = nn.Linear(self.input_size, data.re_feature_alphabet_sizes[relation_alphabet_id], bias=False)
 
         self.criterion = nn.CrossEntropyLoss()
 
