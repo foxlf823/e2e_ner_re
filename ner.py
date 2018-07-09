@@ -22,11 +22,7 @@ import my_utils
 from data_structure import Entity
 from utils.data import data
 
-def featureCapital(word):
-    if word[0].isalpha() and word[0].isupper():
-        return 1
-    else:
-        return 0
+
 
 ENTITY_TYPE = set(['Severity', 'Route', 'Drug', 'Dose', 'Frequency', 'Indication', 'Duration', 'ADE', 'SSLIF'])
 def getLabel(start, end, sent_entity):
@@ -82,7 +78,7 @@ def generateData(tokens, entitys, names, output_file):
             for _, token in sent_token.iterrows():
                 word = token['text']
                 pos = token['postag']
-                cap = featureCapital(word)
+                cap = my_utils.featureCapital(word)
                 label = getLabel(token['start'], token['end'], sent_entity)
 
                 f.write("{} [Cap]{} [POS]{} {}\n".format(word, cap, pos, label))
@@ -105,7 +101,7 @@ def generateDataForOneDoc(doc_token, doc_entity):
         for _, token in sent_token.iterrows():
             word = token['text']
             pos = token['postag']
-            cap = featureCapital(word)
+            cap = my_utils.featureCapital(word)
             label = getLabel(token['start'], token['end'], sent_entity)
 
             lines.append("{} [Cap]{} [POS]{} {}\n".format(word, cap, pos, label))

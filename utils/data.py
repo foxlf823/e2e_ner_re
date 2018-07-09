@@ -9,7 +9,7 @@ from alphabet import Alphabet
 from functions import *
 import cPickle as pickle
 from options import opt
-import my_utils
+import my_utils1
 import relation_extraction
 
 START = "</s>"
@@ -349,7 +349,7 @@ class Data:
                     tk_idx = entity['tf_start']
                     while tk_idx <= entity['tf_end']:
                         entity_alphabet.add(
-                            my_utils.normalizeWord(sentence.iloc[tk_idx, 0]))  # assume 'text' is in 0 column
+                            my_utils1.normalizeWord(sentence.iloc[tk_idx, 0]))  # assume 'text' is in 0 column
                         tk_idx += 1
 
                 sent_idx += 1

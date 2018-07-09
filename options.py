@@ -10,6 +10,7 @@ parser.add_argument('-ner_dir', default='ner')
 parser.add_argument('-re_dir', default='re')
 parser.add_argument('-ner_iter', type=int, default=50)
 parser.add_argument('-re_iter', type=int, default=50)
+parser.add_argument('-use_gold_ner', action='store_true', default=False)
 
 opt = parser.parse_args()
 

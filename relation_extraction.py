@@ -13,11 +13,12 @@ import math
 import pandas as pd
 
 
-import my_utils
+import my_utils1
 from feature_extractor import *
 # from utils.data import data
 from data_structure import *
 import utils.functions
+from classifymodel import ClassifyModel
 
 # def dataset_stat(tokens, entities, relations):
 #     word_alphabet = sortedcontainers.SortedSet()
@@ -252,6 +253,87 @@ def train(data, dir):
     logging.info("training completed")
 
 
+def train1(data, dir):
+
+    my_collate = my_utils.sorted_collate1
+
+    train_loader, train_iter = makeDatasetWithoutUnknown(data.re_train_X, data.re_train_Y, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']], True, my_collate, data.HP_batch_size)
+    num_iter = len(train_loader)
+    unk_loader, unk_iter = makeDatasetUnknown(data.re_train_X, data.re_train_Y, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']], my_collate, data.unk_ratio, data.HP_batch_size)
+
+    test_loader = DataLoader(my_utils.RelationDataset(data.re_test_X, data.re_test_Y),
+                              data.HP_batch_size, shuffle=False, collate_fn=my_collate)
+
+
+    model = ClassifyModel(data)
+    if torch.cuda.is_available():
+        model = model.cuda(data.HP_gpu)
+
+    optimizer = optim.Adam(model.parameters(), lr=data.HP_lr)
+
+    if data.tune_wordemb == False:
+        my_utils.freeze_net(model.word_hidden.wordrep.word_embedding)
+
+    best_acc = 0.0
+    logging.info("start training ...")
+    for epoch in range(data.max_epoch):
+
+        model.train()
+        correct, total = 0, 0
+
+        for i in tqdm(range(num_iter)):
+            [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
+            batch_char, batch_charlen, batch_charrecover, \
+            position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
+            tok_num_betw, et_num], targets = my_utils.endless_get_next_batch_without_rebatch1(train_loader, train_iter)
+
+
+            loss, pred = model.neg_log_likelihood_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
+                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets)
+
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            total += targets.size(0)
+            correct += (pred == targets).sum().item()
+
+
+            [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
+            batch_char, batch_charlen, batch_charrecover, \
+            position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
+            tok_num_betw, et_num], targets = my_utils.endless_get_next_batch_without_rebatch1(unk_loader, unk_iter)
+
+            loss, pred = model.neg_log_likelihood_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
+                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets)
+
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+
+        unk_loader, unk_iter = makeDatasetUnknown(data.re_train_X, data.re_train_Y,
+                                                  data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']],
+                                                  my_collate, data.unk_ratio, data.HP_batch_size)
+
+        logging.info('epoch {} end'.format(epoch))
+        logging.info('Train Accuracy: {}%'.format(100.0 * correct / total))
+
+        test_accuracy = evaluate1(model, test_loader)
+        # test_accuracy = evaluate(m, test_loader)
+        logging.info('Test Accuracy: {}%'.format(test_accuracy))
+
+        if test_accuracy > best_acc:
+            best_acc = test_accuracy
+            torch.save(model.state_dict(), '{}/model.pkl'.format(dir))
+            logging.info('New best accuracy: {}'.format(best_acc))
+
+
+    logging.info("training completed")
+
+
 def evaluate(feature_extractor, m, loader, other):
     #results = []
     feature_extractor.eval()
@@ -290,6 +372,30 @@ def evaluate(feature_extractor, m, loader, other):
         #     d["type"] = pred[i].item()
 
         # iii += 1
+
+    acc = 100.0 * correct / total
+    return acc
+
+def evaluate1(model, loader):
+
+    model.eval()
+    it = iter(loader)
+    correct = 0
+    total = 0
+
+    for [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
+            batch_char, batch_charlen, batch_charrecover, \
+            position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
+            tok_num_betw, et_num], targets in it:
+
+
+        with torch.no_grad():
+
+            pred = model.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
+                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
+
+            total += targets.size(0)
+            correct += (pred == targets).sum().data.item()
 
     acc = 100.0 * correct / total
     return acc
@@ -337,6 +443,57 @@ def evaluateWhenTest(feature_extractor, m, instances, data, test_other, relation
             _, unsort_idx = sort_idx.sort(0, descending=False)
             pred = pred.index_select(0, unsort_idx)
 
+
+
+        for i in range(start,end):
+
+            former = test_other[i][0]
+            latter = test_other[i][1]
+
+            relation_type = relationVocab.get_instance(pred[i-start].item())
+            if relation_type == '</unk>':
+                continue
+            elif relationConstraint1(relation_type, former.type, latter.type) == False:
+                continue
+            else:
+                relation = Relation()
+                relation.create(str(relation_id), relation_type, former, latter)
+                relations.append(relation)
+
+                relation_id += 1
+
+    return relations
+
+def evaluateWhenTest1(model, instances, data, test_other, relationVocab):
+
+    model.eval()
+    batch_size = data.HP_batch_size
+
+    relations = []
+    relation_id = 1
+
+    train_num = len(instances)
+    total_batch = train_num//batch_size+1
+    for batch_id in range(total_batch):
+        start = batch_id*batch_size
+        end = (batch_id+1)*batch_size
+        if end > train_num:
+            end = train_num
+        instance = instances[start:end]
+        if not instance:
+            continue
+
+        [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
+         batch_char, batch_charlen, batch_charrecover, \
+         position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
+         tok_num_betw, et_num], targets = my_utils.sorted_collate1(instance)
+
+        with torch.no_grad():
+
+            pred = model.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
+                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
+
+            pred = pred.index_select(0, batch_wordrecover)
 
 
         for i in range(start,end):
@@ -542,6 +699,8 @@ def getRelationInstance2(tokens, entities, relations, names, data):
 
                     words = []
                     postags = []
+                    cap = []
+                    chars = []
                     positions1 = []
                     positions2 = []
                     former_token = []
@@ -552,9 +711,14 @@ def getRelationInstance2(tokens, entities, relations, names, data):
                             word = utils.functions.normalize_word(token['text'])
                         else:
                             word = token['text']
-                        entity_word = my_utils.normalizeWord(token['text'])
+                        entity_word = my_utils1.normalizeWord(token['text'])
                         words.append(data.word_alphabet.get_index(word))
                         postags.append(data.feature_alphabets[data.feature_name2id['[POS]']].get_index(token['postag']))
+                        cap.append(data.feature_alphabets[data.feature_name2id['[Cap]']].get_index(str(my_utils.featureCapital(token['text']))))
+                        char_for1word = []
+                        for char in word:
+                            char_for1word.append(data.char_alphabet.get_index(char))
+                        chars.append(char_for1word)
 
                         if i < former_tf_start:
                             positions1.append(data.re_feature_alphabets[data.re_feature_name2id['[POSITION]']].get_index(former_tf_start - i))
@@ -583,19 +747,19 @@ def getRelationInstance2(tokens, entities, relations, names, data):
                         for s in splitted:
                             s = s.strip()
                             if s != "":
-                                former_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils.normalizeWord(s)))
+                                former_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils1.normalizeWord(s)))
                     if len(latter_token) == 0:
                         splitted = my_utils.my_tokenize(latter['text'])
                         for s in splitted:
                             s = s.strip()
                             if s != "":
-                                latter_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils.normalizeWord(s)))
+                                latter_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils1.normalizeWord(s)))
 
                     assert len(former_token)>0
                     assert len(latter_token)>0
 
 
-                    features = {'tokens': words, 'postag': postags, 'positions1': positions1, 'positions2': positions2}
+                    features = {'tokens': words, 'postag': postags, 'cap': cap, 'char': chars, 'positions1': positions1, 'positions2': positions2}
                     if type_constraint == 1:
                         features['e1_type'] = data.re_feature_alphabets[data.re_feature_name2id['[ENTITY_TYPE]']].get_index(former['type'])
                         features['e2_type'] = data.re_feature_alphabets[data.re_feature_name2id['[ENTITY_TYPE]']].get_index(latter['type'])
@@ -683,6 +847,8 @@ def getRelationInstanceForOneDoc(doc_token, entities, doc_name, data):
 
                 words = []
                 postags = []
+                cap = []
+                chars = []
                 positions1 = []
                 positions2 = []
                 former_token = []
@@ -693,9 +859,15 @@ def getRelationInstanceForOneDoc(doc_token, entities, doc_name, data):
                         word = utils.functions.normalize_word(token['text'])
                     else:
                         word = token['text']
-                    entity_word = my_utils.normalizeWord(token['text'])
+                    entity_word = my_utils1.normalizeWord(token['text'])
                     words.append(data.word_alphabet.get_index(word))
                     postags.append(data.feature_alphabets[data.feature_name2id['[POS]']].get_index(token['postag']))
+                    cap.append(data.feature_alphabets[data.feature_name2id['[Cap]']].get_index(
+                        str(my_utils.featureCapital(token['text']))))
+                    char_for1word = []
+                    for char in word:
+                        char_for1word.append(data.char_alphabet.get_index(char))
+                    chars.append(char_for1word)
 
                     if i < former_tf_start:
                         positions1.append(data.re_feature_alphabets[data.re_feature_name2id['[POSITION]']].get_index(
@@ -731,20 +903,20 @@ def getRelationInstanceForOneDoc(doc_token, entities, doc_name, data):
                     for s in splitted:
                         s = s.strip()
                         if s != "":
-                            former_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils.normalizeWord(s)))
+                            former_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils1.normalizeWord(s)))
                 if len(latter_token) == 0:
                     #splitted = re.split(r"\s+| +|[\(\)\[\]\-_,]+", latter['text'])
                     splitted = my_utils.my_tokenize(latter.text)
                     for s in splitted:
                         s = s.strip()
                         if s != "":
-                            latter_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils.normalizeWord(s)))
+                            latter_token.append(data.re_feature_alphabets[data.re_feature_name2id['[ENTITY]']].get_index(my_utils1.normalizeWord(s)))
 
                 assert len(former_token)>0
                 assert len(latter_token)>0
 
 
-                features = {'tokens': words, 'postag': postags, 'positions1': positions1, 'positions2': positions2}
+                features = {'tokens': words, 'postag': postags, 'cap': cap, 'char': chars, 'positions1': positions1, 'positions2': positions2}
                 if type_constraint == 1:
                     features['e1_type'] = data.re_feature_alphabets[data.re_feature_name2id['[ENTITY_TYPE]']].get_index(former.type)
                     features['e2_type'] = data.re_feature_alphabets[data.re_feature_name2id['[ENTITY_TYPE]']].get_index(latter.type)
