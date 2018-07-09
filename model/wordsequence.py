@@ -12,7 +12,7 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from wordrep import WordRep
 
 class WordSequence(nn.Module):
-    def __init__(self, data):
+    def __init__(self, data, use_position):
         super(WordSequence, self).__init__()
         print("build word sequence feature extractor: %s..."%(data.word_feature_extractor))
         self.gpu = data.HP_gpu
@@ -22,7 +22,7 @@ class WordSequence(nn.Module):
         self.droplstm = nn.Dropout(data.HP_dropout)
         self.bilstm_flag = data.HP_bilstm
         self.lstm_layer = data.HP_lstm_layer
-        self.wordrep = WordRep(data)
+        self.wordrep = WordRep(data, use_position)
 
         self.input_size = data.word_emb_dim
         if self.use_char:
@@ -31,6 +31,11 @@ class WordSequence(nn.Module):
                 self.input_size += data.HP_char_hidden_dim
         for idx in range(data.feature_num):
             self.input_size += data.feature_emb_dims[idx]
+
+        self.use_position = use_position
+        if self.use_position:
+            self.input_size += 2*data.re_feature_emb_dims[data.re_feature_name2id['[POSITION]']]
+
         # The LSTM takes word embeddings as inputs, and outputs hidden states
         # with dimensionality hidden_dim.
         if self.bilstm_flag:
@@ -71,7 +76,8 @@ class WordSequence(nn.Module):
                 self.lstm = self.lstm.cuda(self.gpu)
 
 
-    def forward(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover):
+    def forward(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
+                position1_inputs, position2_inputs):
         """
             input:
                 word_inputs: (batch_size, sent_len)
@@ -82,7 +88,8 @@ class WordSequence(nn.Module):
             output: 
                 Variable(batch_size, sent_len, hidden_dim)
         """
-        word_represent = self.wordrep(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover)
+        word_represent = self.wordrep(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
+                                      position1_inputs, position2_inputs)
         ## word_embs (batch_size, seq_len, embed_size)
         if self.word_feature_extractor == "CNN":
             word_in = F.tanh(self.word2cnn(word_represent)).transpose(2,1).contiguous()

@@ -28,7 +28,7 @@ class SeqModel(nn.Module):
         ## add two more label for downlayer lstm, use original label size for CRF
         label_size = data.label_alphabet_size
         # data.label_alphabet_size += 2
-        self.word_hidden = WordSequence(data)
+        self.word_hidden = WordSequence(data, False)
 
         # The linear layer that maps from hidden state space to tag space
         self.hidden2tag = nn.Linear(data.HP_hidden_dim, label_size+2)
@@ -41,7 +41,7 @@ class SeqModel(nn.Module):
 
 
     def neg_log_likelihood_loss(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover, batch_label, mask):
-        outs = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover)
+        outs = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover, None, None)
         outs = self.hidden2tag(outs)
 
         batch_size = word_inputs.size(0)
@@ -62,7 +62,7 @@ class SeqModel(nn.Module):
 
 
     def forward(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover, mask):
-        outs = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover)
+        outs = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover, None, None)
         outs = self.hidden2tag(outs)
 
         batch_size = word_inputs.size(0)
@@ -86,7 +86,7 @@ class SeqModel(nn.Module):
         if not self.use_crf:
             print "Nbest output is currently supported only for CRF! Exit..."
             exit(0)
-        outs = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover)
+        outs = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover, None, None)
         outs = self.hidden2tag(outs)
 
         batch_size = word_inputs.size(0)

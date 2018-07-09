@@ -84,10 +84,12 @@ elif opt.whattodo==2:
 
     data.show_data_summary()
 
-    ner.train(data, opt.ner_dir)
+    if opt.ner_iter > 0:
+        ner.train(data, opt.ner_dir)
 
-    # relation_extraction.train(data, opt.re_dir)
-    relation_extraction.train1(data, opt.re_dir)
+    if opt.re_iter > 0:
+        # relation_extraction.train(data, opt.re_dir)
+        relation_extraction.train1(data, opt.re_dir)
 
 elif opt.whattodo==3:
 

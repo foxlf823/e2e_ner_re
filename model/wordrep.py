@@ -14,7 +14,7 @@ from charbigru import CharBiGRU
 from charcnn import CharCNN
 
 class WordRep(nn.Module):
-    def __init__(self, data):
+    def __init__(self, data, use_position):
         super(WordRep, self).__init__()
         print "build word representation..."
         self.gpu = data.HP_gpu
@@ -57,14 +57,31 @@ class WordRep(nn.Module):
             else:
                 self.feature_embeddings[idx].weight.data.copy_(torch.from_numpy(self.random_embedding(data.feature_alphabets[idx].size(), self.feature_embedding_dims[idx])))
 
+        self.use_position = use_position
+        if self.use_position:
+
+            position_alphabet_id = data.re_feature_name2id['[POSITION]']
+            self.position_embedding_dim = data.re_feature_emb_dims[position_alphabet_id]
+            self.position1_emb = nn.Embedding(data.re_feature_alphabet_sizes[position_alphabet_id],
+                                              self.position_embedding_dim, data.pad_idx)
+            self.position1_emb.weight.data.copy_(
+                torch.from_numpy(self.random_embedding(data.re_feature_alphabet_sizes[position_alphabet_id],
+                                              self.position_embedding_dim)))
+
+            self.position2_emb = nn.Embedding(data.re_feature_alphabet_sizes[position_alphabet_id],
+                                              self.position_embedding_dim, data.pad_idx)
+            self.position2_emb.weight.data.copy_(
+                torch.from_numpy(self.random_embedding(data.re_feature_alphabet_sizes[position_alphabet_id],
+                                              self.position_embedding_dim)))
 
         if torch.cuda.is_available():
             self.drop = self.drop.cuda(self.gpu)
             self.word_embedding = self.word_embedding.cuda(self.gpu)
             for idx in range(self.feature_num):
                 self.feature_embeddings[idx] = self.feature_embeddings[idx].cuda(self.gpu)
-
-
+            if self.use_position:
+                self.position1_emb = self.position1_emb.cuda(self.gpu)
+                self.position2_emb = self.position2_emb.cuda(self.gpu)
 
     def random_embedding(self, vocab_size, embedding_dim):
         pretrain_emb = np.empty([vocab_size, embedding_dim])
@@ -74,7 +91,8 @@ class WordRep(nn.Module):
         return pretrain_emb
 
 
-    def forward(self, word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover):
+    def forward(self, word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover, position1_inputs,
+                position2_inputs):
         """
             input:
                 word_inputs: (batch_size, sent_len)
@@ -107,6 +125,14 @@ class WordRep(nn.Module):
                 char_features_extra = char_features_extra.view(batch_size,sent_len,-1)
                 ## concat word and char together
                 word_list.append(char_features_extra)
+
+        if self.use_position:
+            position1_feature = self.position1_emb(position1_inputs)
+            position2_feature = self.position2_emb(position2_inputs)
+            word_list.append(position1_feature)
+            word_list.append(position2_feature)
+
+
         word_embs = torch.cat(word_list, 2)
         word_represent = self.drop(word_embs)
         return word_represent

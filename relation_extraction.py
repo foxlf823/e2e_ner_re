@@ -289,6 +289,7 @@ def train1(data, dir):
 
 
             loss, pred = model.neg_log_likelihood_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
+                                                       position1_seq_tensor, position2_seq_tensor,
                                                        e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets)
 
 
@@ -306,6 +307,7 @@ def train1(data, dir):
             tok_num_betw, et_num], targets = my_utils.endless_get_next_batch_without_rebatch1(unk_loader, unk_iter)
 
             loss, pred = model.neg_log_likelihood_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
+                                                       position1_seq_tensor, position2_seq_tensor,
                                                        e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets)
 
 
@@ -392,6 +394,7 @@ def evaluate1(model, loader):
         with torch.no_grad():
 
             pred = model.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
+                                 position1_seq_tensor, position2_seq_tensor,
                                                        e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
 
             total += targets.size(0)
@@ -491,7 +494,8 @@ def evaluateWhenTest1(model, instances, data, test_other, relationVocab):
         with torch.no_grad():
 
             pred = model.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
-                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
+                                 position1_seq_tensor, position2_seq_tensor,
+                                 e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
 
             pred = pred.index_select(0, batch_wordrecover)
 
