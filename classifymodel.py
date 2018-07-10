@@ -12,10 +12,7 @@ class ClassifyModel(nn.Module):
         super(ClassifyModel, self).__init__()
 
         print "build classify network..."
-        print "use_char: ", data.use_char
-        if data.use_char:
-            print "char feature extractor: ", data.char_feature_extractor
-        print "word feature extractor: ", data.word_feature_extractor
+
 
         self.gpu = data.HP_gpu
         self.average_batch = data.average_batch_loss
@@ -23,7 +20,7 @@ class ClassifyModel(nn.Module):
         relation_alphabet_id = data.re_feature_name2id['[RELATION]']
         label_size = data.re_feature_alphabet_sizes[relation_alphabet_id]
 
-        self.word_hidden = WordSequence(data, True)
+        self.word_hidden = WordSequence(data, True, False, False)
 
         self.attn = DotAttentionLayer(data.HP_hidden_dim, self.gpu)
 

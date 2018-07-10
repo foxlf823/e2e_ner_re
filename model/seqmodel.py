@@ -28,7 +28,7 @@ class SeqModel(nn.Module):
         ## add two more label for downlayer lstm, use original label size for CRF
         label_size = data.label_alphabet_size
         # data.label_alphabet_size += 2
-        self.word_hidden = WordSequence(data, False)
+        self.word_hidden = WordSequence(data, False, True, data.use_char)
 
         # The linear layer that maps from hidden state space to tag space
         self.hidden2tag = nn.Linear(data.HP_hidden_dim, label_size+2)

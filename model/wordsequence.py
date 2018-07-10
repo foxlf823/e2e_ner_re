@@ -12,25 +12,29 @@ from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from wordrep import WordRep
 
 class WordSequence(nn.Module):
-    def __init__(self, data, use_position):
+    def __init__(self, data, use_position, use_cap, use_char):
         super(WordSequence, self).__init__()
         print("build word sequence feature extractor: %s..."%(data.word_feature_extractor))
         self.gpu = data.HP_gpu
-        self.use_char = data.use_char
+        self.use_char = use_char
         # self.batch_size = data.HP_batch_size
         # self.hidden_dim = data.HP_hidden_dim
         self.droplstm = nn.Dropout(data.HP_dropout)
         self.bilstm_flag = data.HP_bilstm
         self.lstm_layer = data.HP_lstm_layer
-        self.wordrep = WordRep(data, use_position)
+        self.wordrep = WordRep(data, use_position, use_cap, use_char)
 
         self.input_size = data.word_emb_dim
         if self.use_char:
             self.input_size += data.HP_char_hidden_dim
             if data.char_feature_extractor == "ALL":
                 self.input_size += data.HP_char_hidden_dim
-        for idx in range(data.feature_num):
-            self.input_size += data.feature_emb_dims[idx]
+
+        if use_cap:
+            for idx in range(data.feature_num):
+                self.input_size += data.feature_emb_dims[idx]
+        else:
+            self.input_size += data.feature_emb_dims[data.feature_name2id['[POS]']]
 
         self.use_position = use_position
         if self.use_position:

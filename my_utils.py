@@ -647,7 +647,8 @@ def pad1(x, y, eos_idx):
     batch_size = len(x)
 
     words = [s['tokens'] for s in x]
-    features = [np.asarray(zip(s['cap'],s['postag'])) for s in x]
+    # features = [np.asarray(zip(s['cap'],s['postag'])) for s in x]
+    features = [np.asarray(zip(s['postag'])) for s in x]
     feature_num = len(features[0][0])
     chars = [s['char'] for s in x]
 

@@ -200,7 +200,7 @@ def train(data, dir):
         m.train()
         correct, total = 0, 0
 
-        for i in tqdm(range(num_iter)):
+        for i in range(num_iter):
 
             x2, x1, targets = my_utils.endless_get_next_batch_without_rebatch(train_loader, train_iter)
 
@@ -281,7 +281,7 @@ def train1(data, dir):
         model.train()
         correct, total = 0, 0
 
-        for i in tqdm(range(num_iter)):
+        for i in range(num_iter):
             [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
             batch_char, batch_charlen, batch_charrecover, \
             position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \

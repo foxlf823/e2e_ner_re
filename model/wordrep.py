@@ -14,11 +14,11 @@ from charbigru import CharBiGRU
 from charcnn import CharCNN
 
 class WordRep(nn.Module):
-    def __init__(self, data, use_position):
+    def __init__(self, data, use_position, use_cap, use_char):
         super(WordRep, self).__init__()
         print "build word representation..."
         self.gpu = data.HP_gpu
-        self.use_char = data.use_char
+        self.use_char = use_char
         self.batch_size = data.HP_batch_size
         self.char_hidden_dim = 0
         self.char_all_feature = False
@@ -45,17 +45,30 @@ class WordRep(nn.Module):
             self.word_embedding.weight.data.copy_(torch.from_numpy(data.pretrain_word_embedding))
         else:
             self.word_embedding.weight.data.copy_(torch.from_numpy(self.random_embedding(data.word_alphabet.size(), self.embedding_dim)))
-        
-        self.feature_num = data.feature_num
-        self.feature_embedding_dims = data.feature_emb_dims
-        self.feature_embeddings = nn.ModuleList()
-        for idx in range(self.feature_num):
-            self.feature_embeddings.append(nn.Embedding(data.feature_alphabets[idx].size(), self.feature_embedding_dims[idx]))
-        for idx in range(self.feature_num):
-            if data.pretrain_feature_embeddings[idx] is not None:
-                self.feature_embeddings[idx].weight.data.copy_(torch.from_numpy(data.pretrain_feature_embeddings[idx]))
-            else:
-                self.feature_embeddings[idx].weight.data.copy_(torch.from_numpy(self.random_embedding(data.feature_alphabets[idx].size(), self.feature_embedding_dims[idx])))
+
+        if use_cap:
+            self.feature_num = data.feature_num
+            self.feature_embedding_dims = data.feature_emb_dims
+            self.feature_embeddings = nn.ModuleList()
+            for idx in range(self.feature_num):
+                self.feature_embeddings.append(nn.Embedding(data.feature_alphabets[idx].size(), self.feature_embedding_dims[idx]))
+            for idx in range(self.feature_num):
+                if data.pretrain_feature_embeddings[idx] is not None:
+                    self.feature_embeddings[idx].weight.data.copy_(torch.from_numpy(data.pretrain_feature_embeddings[idx]))
+                else:
+                    self.feature_embeddings[idx].weight.data.copy_(torch.from_numpy(self.random_embedding(data.feature_alphabets[idx].size(), self.feature_embedding_dims[idx])))
+        else:
+            postag_alphabet_id = data.feature_name2id['[POS]']
+            self.feature_num = 1
+            self.feature_embedding_dims = data.feature_emb_dims
+            self.feature_embeddings = nn.ModuleList()
+            for idx in range(self.feature_num):
+                self.feature_embeddings.append(
+                    nn.Embedding(data.feature_alphabets[postag_alphabet_id].size(), self.feature_embedding_dims[postag_alphabet_id]))
+            for idx in range(self.feature_num):
+                self.feature_embeddings[idx].weight.data.copy_(torch.from_numpy(
+                    self.random_embedding(data.feature_alphabets[postag_alphabet_id].size(), self.feature_embedding_dims[postag_alphabet_id])))
+
 
         self.use_position = use_position
         if self.use_position:
