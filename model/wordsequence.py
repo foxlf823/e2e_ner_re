@@ -10,6 +10,7 @@ import torch.nn.functional as F
 import numpy as np
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 from wordrep import WordRep
+import my_utils
 
 class WordSequence(nn.Module):
     def __init__(self, data, use_position, use_cap, use_char):
@@ -23,6 +24,7 @@ class WordSequence(nn.Module):
         self.bilstm_flag = data.HP_bilstm
         self.lstm_layer = data.HP_lstm_layer
         self.wordrep = WordRep(data, use_position, use_cap, use_char)
+        self.tune_wordemb = data.tune_wordemb
 
         self.input_size = data.word_emb_dim
         if self.use_char:
@@ -114,3 +116,18 @@ class WordSequence(nn.Module):
             feature_out = self.droplstm(lstm_out.transpose(1,0))
         ## feature_out (batch_size, seq_len, hidden_size)
         return feature_out
+
+    def freeze_net(self):
+
+        for p in self.parameters():
+            p.requires_grad = False
+
+
+    def unfreeze_net(self):
+
+        for p in self.parameters():
+            p.requires_grad = True
+
+        if self.tune_wordemb == False:
+            for p in self.wordrep.word_embedding.parameters():
+                p.requires_grad = False

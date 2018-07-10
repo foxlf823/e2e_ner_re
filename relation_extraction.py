@@ -159,99 +159,99 @@ def makeDatasetUnknown(test_X, test_Y, relation_vocab, my_collate, ratio, batch_
 
     return test_loader, it
 
-def train(data, dir):
-
-    # cnnrnn
-    if data.feature_extractor == 'lstm':
-        my_collate = my_utils.sorted_collate
-    else:
-        my_collate = my_utils.unsorted_collate
-
-
-    train_loader, train_iter = makeDatasetWithoutUnknown(data.re_train_X, data.re_train_Y, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']], True, my_collate, data.HP_batch_size)
-    num_iter = len(train_loader)
-    unk_loader, unk_iter = makeDatasetUnknown(data.re_train_X, data.re_train_Y, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']], my_collate, data.unk_ratio, data.HP_batch_size)
-
-    test_loader = DataLoader(my_utils.RelationDataset(data.re_test_X, data.re_test_Y),
-                              data.HP_batch_size, shuffle=False, collate_fn=my_collate)
-
-
-    # cnnrnn
-    if data.feature_extractor == 'lstm':
-        m_low = LSTMFeatureExtractor(data, 1, data.seq_feature_size, data.HP_dropout, data.HP_gpu)
-    if torch.cuda.is_available():
-        m_low = m_low.cuda(data.HP_gpu)
-
-
-    m = MLP(data.seq_feature_size, data)
-    if torch.cuda.is_available():
-        m = m.cuda(data.HP_gpu)
-
-    iter_parameter = itertools.chain(*map(list, [m_low.parameters(), m.parameters()]))
-    optimizer = optim.Adam(iter_parameter, lr=data.HP_lr)
-
-    if data.tune_wordemb == False:
-        my_utils.freeze_net(m_low.word_emb)
-
-    best_acc = 0.0
-    logging.info("start training ...")
-    for epoch in range(data.max_epoch):
-        m_low.train()
-        m.train()
-        correct, total = 0, 0
-
-        for i in range(num_iter):
-
-            x2, x1, targets = my_utils.endless_get_next_batch_without_rebatch(train_loader, train_iter)
-
-            hidden_features = m_low.forward(x2, x1)
-
-            outputs = m.forward(hidden_features, x2, x1)
-            loss = m.loss(targets, outputs)
-            # logging.info("output: {}".format(outputs))
-            # logging.info("loss: {}".format(loss.item()))
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            total += targets.size(0)
-            _, pred = torch.max(outputs, 1)
-            correct += (pred == targets).sum().item()
-
-
-            x2, x1, targets = my_utils.endless_get_next_batch_without_rebatch(unk_loader, unk_iter)
-
-            hidden_features = m_low.forward(x2, x1)
-
-            outputs = m.forward(hidden_features, x2, x1)
-            loss = m.loss(targets, outputs)
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-
-        unk_loader, unk_iter = makeDatasetUnknown(data.re_train_X, data.re_train_Y,
-                                                  data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']],
-                                                  my_collate, data.unk_ratio, data.HP_batch_size)
-
-        logging.info('epoch {} end'.format(epoch))
-        logging.info('Train Accuracy: {}%'.format(100.0 * correct / total))
-
-        test_accuracy = evaluate(m_low, m, test_loader, None)
-        # test_accuracy = evaluate(m, test_loader)
-        logging.info('Test Accuracy: {}%'.format(test_accuracy))
-
-        if test_accuracy > best_acc:
-            best_acc = test_accuracy
-            torch.save(m_low.state_dict(), '{}/feature_extractor.pth'.format(dir))
-            torch.save(m.state_dict(), '{}/model.pth'.format(dir))
-            logging.info('New best accuracy: {}'.format(best_acc))
-
-
-    logging.info("training completed")
-
+# def train(data, dir):
+#
+#     # cnnrnn
+#     if data.feature_extractor == 'lstm':
+#         my_collate = my_utils.sorted_collate
+#     else:
+#         my_collate = my_utils.unsorted_collate
+#
+#
+#     train_loader, train_iter = makeDatasetWithoutUnknown(data.re_train_X, data.re_train_Y, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']], True, my_collate, data.HP_batch_size)
+#     num_iter = len(train_loader)
+#     unk_loader, unk_iter = makeDatasetUnknown(data.re_train_X, data.re_train_Y, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']], my_collate, data.unk_ratio, data.HP_batch_size)
+#
+#     test_loader = DataLoader(my_utils.RelationDataset(data.re_test_X, data.re_test_Y),
+#                               data.HP_batch_size, shuffle=False, collate_fn=my_collate)
+#
+#
+#     # cnnrnn
+#     if data.feature_extractor == 'lstm':
+#         m_low = LSTMFeatureExtractor(data, 1, data.seq_feature_size, data.HP_dropout, data.HP_gpu)
+#     if torch.cuda.is_available():
+#         m_low = m_low.cuda(data.HP_gpu)
+#
+#
+#     m = MLP(data.seq_feature_size, data)
+#     if torch.cuda.is_available():
+#         m = m.cuda(data.HP_gpu)
+#
+#     iter_parameter = itertools.chain(*map(list, [m_low.parameters(), m.parameters()]))
+#     optimizer = optim.Adam(iter_parameter, lr=data.HP_lr)
+#
+#     if data.tune_wordemb == False:
+#         my_utils.freeze_net(m_low.word_emb)
+#
+#     best_acc = 0.0
+#     logging.info("start training ...")
+#     for epoch in range(data.max_epoch):
+#         m_low.train()
+#         m.train()
+#         correct, total = 0, 0
+#
+#         for i in range(num_iter):
+#
+#             x2, x1, targets = my_utils.endless_get_next_batch_without_rebatch(train_loader, train_iter)
+#
+#             hidden_features = m_low.forward(x2, x1)
+#
+#             outputs = m.forward(hidden_features, x2, x1)
+#             loss = m.loss(targets, outputs)
+#             # logging.info("output: {}".format(outputs))
+#             # logging.info("loss: {}".format(loss.item()))
+#
+#             optimizer.zero_grad()
+#             loss.backward()
+#             optimizer.step()
+#
+#             total += targets.size(0)
+#             _, pred = torch.max(outputs, 1)
+#             correct += (pred == targets).sum().item()
+#
+#
+#             x2, x1, targets = my_utils.endless_get_next_batch_without_rebatch(unk_loader, unk_iter)
+#
+#             hidden_features = m_low.forward(x2, x1)
+#
+#             outputs = m.forward(hidden_features, x2, x1)
+#             loss = m.loss(targets, outputs)
+#
+#             optimizer.zero_grad()
+#             loss.backward()
+#             optimizer.step()
+#
+#
+#         unk_loader, unk_iter = makeDatasetUnknown(data.re_train_X, data.re_train_Y,
+#                                                   data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']],
+#                                                   my_collate, data.unk_ratio, data.HP_batch_size)
+#
+#         logging.info('epoch {} end'.format(epoch))
+#         logging.info('Train Accuracy: {}%'.format(100.0 * correct / total))
+#
+#         test_accuracy = evaluate(m_low, m, test_loader, None)
+#         # test_accuracy = evaluate(m, test_loader)
+#         logging.info('Test Accuracy: {}%'.format(test_accuracy))
+#
+#         if test_accuracy > best_acc:
+#             best_acc = test_accuracy
+#             torch.save(m_low.state_dict(), '{}/feature_extractor.pth'.format(dir))
+#             torch.save(m.state_dict(), '{}/model.pth'.format(dir))
+#             logging.info('New best accuracy: {}'.format(best_acc))
+#
+#
+#     logging.info("training completed")
+#
 
 def train1(data, dir):
 

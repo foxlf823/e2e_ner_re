@@ -12,6 +12,7 @@ import pandas as pd
 import re
 import nltk
 from utils.data import data
+from options import opt
 
 
 pattern = re.compile(r'[-_/]+')
@@ -793,6 +794,11 @@ def random_embedding(vocab_size, embedding_dim):
     for index in range(vocab_size):
         pretrain_emb[index,:] = np.random.uniform(-scale, scale, [1, embedding_dim])
     return pretrain_emb
+
+def reverse_grad(net):
+    for p in net.parameters():
+        if p.grad is not None: # word emb is not finetuned, so no grad
+            p.grad *= -opt.lambd
 
 
 
