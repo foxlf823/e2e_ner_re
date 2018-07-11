@@ -21,6 +21,8 @@ from tqdm import tqdm
 import my_utils
 from data_structure import Entity
 from utils.data import data
+from model.wordsequence import WordSequence
+import itertools
 
 
 
@@ -136,6 +138,7 @@ def batchify_with_label(input_batch_list, gpu, volatile_flag=False):
         max_seq_len = word_seq_lengths.max()
         word_seq_tensor = autograd.Variable(torch.zeros((batch_size, max_seq_len))).long()
         label_seq_tensor = autograd.Variable(torch.zeros((batch_size, max_seq_len))).long()
+        permute_label_seq_tensor = torch.zeros((batch_size, max_seq_len)).long()
         feature_seq_tensors = []
         for idx in range(feature_num):
             feature_seq_tensors.append(autograd.Variable(torch.zeros((batch_size, max_seq_len))).long())
@@ -143,6 +146,7 @@ def batchify_with_label(input_batch_list, gpu, volatile_flag=False):
         for idx, (seq, label, seqlen) in enumerate(zip(words, labels, word_seq_lengths)):
             word_seq_tensor[idx, :seqlen] = torch.LongTensor(seq)
             label_seq_tensor[idx, :seqlen] = torch.LongTensor(label)
+            permute_label_seq_tensor[idx, :seqlen] = torch.LongTensor(label)[torch.randperm(seqlen)]
             mask[idx, :seqlen] = torch.Tensor([1]*seqlen.item())
             for idy in range(feature_num):
                 feature_seq_tensors[idy][idx,:seqlen] = torch.LongTensor(features[idx][:,idy])
@@ -152,6 +156,7 @@ def batchify_with_label(input_batch_list, gpu, volatile_flag=False):
             feature_seq_tensors[idx] = feature_seq_tensors[idx][word_perm_idx]
 
         label_seq_tensor = label_seq_tensor[word_perm_idx]
+        permute_label_seq_tensor = permute_label_seq_tensor[word_perm_idx]
         mask = mask[word_perm_idx]
         ### deal with char
         # pad_chars (batch_size, max_seq_len)
@@ -178,10 +183,11 @@ def batchify_with_label(input_batch_list, gpu, volatile_flag=False):
             word_seq_lengths = word_seq_lengths.cuda(data.HP_gpu)
             word_seq_recover = word_seq_recover.cuda(data.HP_gpu)
             label_seq_tensor = label_seq_tensor.cuda(data.HP_gpu)
+            permute_label_seq_tensor = permute_label_seq_tensor.cuda(data.HP_gpu)
             char_seq_tensor = char_seq_tensor.cuda(data.HP_gpu)
             char_seq_recover = char_seq_recover.cuda(data.HP_gpu)
             mask = mask.cuda(data.HP_gpu)
-        return word_seq_tensor,feature_seq_tensors, word_seq_lengths, word_seq_recover, char_seq_tensor, char_seq_lengths, char_seq_recover, label_seq_tensor, mask
+        return word_seq_tensor,feature_seq_tensors, word_seq_lengths, word_seq_recover, char_seq_tensor, char_seq_lengths, char_seq_recover, label_seq_tensor, mask, permute_label_seq_tensor
 
 def lr_decay(optimizer, epoch, decay_rate, init_lr):
     lr = init_lr/(1+decay_rate*epoch)
@@ -237,7 +243,7 @@ def recover_label(pred_variable, gold_variable, mask_variable, label_alphabet, w
 
 
 
-def evaluate(data, model, name, nbest=None):
+def evaluate(data, wordseq, model, name, nbest=None):
     if name == "train":
         instances = data.train_Ids
     elif name == "dev":
@@ -255,6 +261,7 @@ def evaluate(data, model, name, nbest=None):
     pred_results = []
     gold_results = []
     ## set model in eval model
+    wordseq.eval()
     model.eval()
     batch_size = data.HP_batch_size
     start_time = time.time()
@@ -268,16 +275,18 @@ def evaluate(data, model, name, nbest=None):
         instance = instances[start:end]
         if not instance:
             continue
-        batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask  = batchify_with_label(instance, data.HP_gpu, True)
+        batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, _ = batchify_with_label(instance, data.HP_gpu, True)
         if nbest:
-            scores, nbest_tag_seq = model.decode_nbest(batch_word,batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, mask, nbest)
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
+            scores, nbest_tag_seq = model.decode_nbest(hidden, mask, nbest)
             nbest_pred_result = recover_nbest_label(nbest_tag_seq, mask, data.label_alphabet, batch_wordrecover)
             nbest_pred_results += nbest_pred_result
             pred_scores += scores[batch_wordrecover].cpu().data.numpy().tolist()
             ## select the best sequence to evalurate
             tag_seq = nbest_tag_seq[:,:,0]
         else:
-            tag_seq = model(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, mask)
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,batch_charrecover, None, None)
+            tag_seq = model(hidden, mask)
         # print "tag:",tag_seq
         pred_label, gold_label = recover_label(tag_seq, batch_label, mask, data.label_alphabet, batch_wordrecover)
         pred_results += pred_label
@@ -293,6 +302,14 @@ def train(data, model_file):
     print "Training model..."
 
     model = SeqModel(data)
+    wordseq = WordSequence(data, False, True, data.use_char)
+    if opt.self_adv == 'grad':
+        wordseq_adv = WordSequence(data, False, True, data.use_char)
+    elif opt.self_adv == 'label':
+        wordseq_adv = WordSequence(data, False, True, data.use_char)
+        model_adv = SeqModel(data)
+    else:
+        wordseq_adv = None
 
     if data.optimizer.lower() == "sgd":
         optimizer = optim.SGD(model.parameters(), lr=data.HP_lr, momentum=data.HP_momentum, weight_decay=data.HP_l2)
@@ -303,14 +320,29 @@ def train(data, model_file):
     elif data.optimizer.lower() == "rmsprop":
         optimizer = optim.RMSprop(model.parameters(), lr=data.HP_lr, weight_decay=data.HP_l2)
     elif data.optimizer.lower() == "adam":
-        optimizer = optim.Adam(model.parameters(), lr=data.HP_lr, weight_decay=data.HP_l2)
+        if opt.self_adv == 'grad':
+            iter_parameter = itertools.chain(*map(list, [wordseq.parameters(), wordseq_adv.parameters(), model.parameters()]))
+            optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+        elif opt.self_adv == 'label':
+            iter_parameter = itertools.chain(*map(list, [wordseq.parameters(), model.parameters()]))
+            optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+            iter_parameter = itertools.chain(*map(list, [wordseq_adv.parameters(), model_adv.parameters()]))
+            optimizer_adv = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+
+        else:
+            iter_parameter = itertools.chain(*map(list, [wordseq.parameters(), model.parameters()]))
+            optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+
     else:
         print("Optimizer illegal: %s" % (data.optimizer))
         exit(0)
     best_dev = -10
 
     if data.tune_wordemb == False:
-        my_utils.freeze_net(model.word_hidden.wordrep.word_embedding)
+        my_utils.freeze_net(wordseq.wordrep.word_embedding)
+        if opt.self_adv != 'no':
+            my_utils.freeze_net(wordseq_adv.wordrep.word_embedding)
+
 
     # data.HP_iteration = 1
     ## start training
@@ -328,6 +360,16 @@ def train(data, model_file):
         whole_token = 0
         random.shuffle(data.train_Ids)
         ## set model in train model
+        wordseq.train()
+        wordseq.zero_grad()
+        if opt.self_adv == 'grad':
+            wordseq_adv.train()
+            wordseq_adv.zero_grad()
+        elif opt.self_adv == 'label':
+            wordseq_adv.train()
+            wordseq_adv.zero_grad()
+            model_adv.train()
+            model_adv.zero_grad()
         model.train()
         model.zero_grad()
         batch_size = data.HP_batch_size
@@ -342,20 +384,63 @@ def train(data, model_file):
             instance = data.train_Ids[start:end]
             if not instance:
                 continue
-            batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask = batchify_with_label(
-                instance, data.HP_gpu)
+            batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask,\
+                batch_permute_label = batchify_with_label(instance, data.HP_gpu)
             instance_count += 1
-            loss, tag_seq = model.neg_log_likelihood_loss(batch_word, batch_features, batch_wordlen, batch_char,
-                                                          batch_charlen, batch_charrecover, batch_label, mask)
-            right, whole = predict_check(tag_seq, batch_label, mask)
-            right_token += right
-            whole_token += whole
+
+            if opt.self_adv == 'grad':
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,batch_charrecover, None, None)
+                hidden_adv = wordseq_adv.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
+                loss, tag_seq = model.neg_log_likelihood_loss(hidden, hidden_adv, batch_label, mask)
+                loss.backward()
+                my_utils.reverse_grad(wordseq_adv)
+                optimizer.step()
+                wordseq.zero_grad()
+                wordseq_adv.zero_grad()
+                model.zero_grad()
+
+            elif opt.self_adv == 'label' :
+                wordseq.unfreeze_net()
+                wordseq_adv.freeze_net()
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,batch_charrecover, None, None)
+                hidden_adv = wordseq_adv.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
+                loss, tag_seq = model.neg_log_likelihood_loss(hidden, hidden_adv, batch_label, mask)
+                loss.backward()
+                optimizer.step()
+                wordseq.zero_grad()
+                wordseq_adv.zero_grad()
+                model.zero_grad()
+
+                wordseq.freeze_net()
+                wordseq_adv.unfreeze_net()
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,batch_charrecover, None, None)
+                hidden_adv = wordseq_adv.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
+                loss_adv, _ = model_adv.neg_log_likelihood_loss(hidden, hidden_adv, batch_permute_label, mask)
+                loss_adv.backward()
+                optimizer_adv.step()
+                wordseq.zero_grad()
+                wordseq_adv.zero_grad()
+                model_adv.zero_grad()
+
+            else:
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
+                hidden_adv = None
+                loss, tag_seq = model.neg_log_likelihood_loss(hidden, hidden_adv, batch_label, mask)
+                loss.backward()
+                optimizer.step()
+                wordseq.zero_grad()
+                model.zero_grad()
+
+
+            # right, whole = predict_check(tag_seq, batch_label, mask)
+            # right_token += right
+            # whole_token += whole
             sample_loss += loss.data.item()
             total_loss += loss.data.item()
             if end % 500 == 0:
-                temp_time = time.time()
-                temp_cost = temp_time - temp_start
-                temp_start = temp_time
+                # temp_time = time.time()
+                # temp_cost = temp_time - temp_start
+                # temp_start = temp_time
                 # print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f" % (
                 # end, temp_cost, sample_loss, right_token, whole_token, (right_token + 0.) / whole_token))
                 if sample_loss > 1e8 or str(sample_loss) == "nan":
@@ -363,11 +448,9 @@ def train(data, model_file):
                     exit(0)
                 sys.stdout.flush()
                 sample_loss = 0
-            loss.backward()
-            optimizer.step()
-            model.zero_grad()
-        temp_time = time.time()
-        temp_cost = temp_time - temp_start
+
+        # temp_time = time.time()
+        # temp_cost = temp_time - temp_start
         # print("     Instance: %s; Time: %.2fs; loss: %.4f; acc: %s/%s=%.4f" % (
         # end, temp_cost, sample_loss, right_token, whole_token, (right_token + 0.) / whole_token))
 
@@ -380,7 +463,8 @@ def train(data, model_file):
             print "ERROR: LOSS EXPLOSION (>1e8) ! PLEASE SET PROPER PARAMETERS AND STRUCTURE! EXIT...."
             exit(0)
         # continue
-        speed, acc, p, r, f, _, _ = evaluate(data, model, "test")
+        speed, acc, p, r, f, _, _ = evaluate(data, wordseq, model, "test")
+
         dev_finish = time.time()
         dev_cost = dev_finish - epoch_finish
 
@@ -398,6 +482,12 @@ def train(data, model_file):
             else:
                 print "Exceed previous best acc score:", best_dev
 
+            torch.save(wordseq.state_dict(), os.path.join(model_file, 'wordseq.pkl'))
+            if opt.self_adv == 'grad':
+                torch.save(wordseq_adv.state_dict(), os.path.join(model_file, 'wordseq_adv.pkl'))
+            elif opt.self_adv == 'label':
+                torch.save(wordseq_adv.state_dict(), os.path.join(model_file, 'wordseq_adv.pkl'))
+                torch.save(model_adv.state_dict(), os.path.join(model_file, 'model_adv.pkl'))
             model_name = os.path.join(model_file, 'model.pkl')
             torch.save(model.state_dict(), model_name)
             best_dev = current_score
@@ -433,10 +523,11 @@ def recover_nbest_label(pred_variable, mask_variable, label_alphabet, word_recov
         pred_label.append(pred)
     return pred_label
 
-def evaluateWhenTest(data, model):
+def evaluateWhenTest(data, wordseq, model):
 
     instances = data.raw_Ids
     nbest_pred_results = []
+    wordseq.eval()
     model.eval()
     batch_size = data.HP_batch_size
 
@@ -450,9 +541,9 @@ def evaluateWhenTest(data, model):
         instance = instances[start:end]
         if not instance:
             continue
-        batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask  = batchify_with_label(instance, data.HP_gpu, True)
-
-        scores, nbest_tag_seq = model.decode_nbest(batch_word,batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, mask, data.nbest)
+        batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, _  = batchify_with_label(instance, data.HP_gpu, True)
+        hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
+        scores, nbest_tag_seq = model.decode_nbest(hidden, mask, data.nbest)
         nbest_pred_result = recover_nbest_label(nbest_tag_seq, mask, data.label_alphabet, batch_wordrecover)
         nbest_pred_results += nbest_pred_result
 

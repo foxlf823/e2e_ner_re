@@ -11,6 +11,8 @@ parser.add_argument('-re_dir', default='re')
 parser.add_argument('-ner_iter', type=int, default=50)
 parser.add_argument('-re_iter', type=int, default=50)
 parser.add_argument('-use_gold_ner', action='store_true', default=False)
+parser.add_argument('-self_adv', default='no', help='no, grad, label')
+parser.add_argument('-lambd', type=float, default=0.05)
 
 opt = parser.parse_args()
 
