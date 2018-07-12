@@ -122,6 +122,8 @@ def test1(data, opt, predict_dir):
     if torch.cuda.is_available():
         classify_model = classify_model.cuda(data.HP_gpu)
     classify_model.load_state_dict(torch.load(os.path.join(opt.re_dir, 'model.pkl')))
+    classify_wordseq = WordSequence(data, True, False, False)
+    classify_wordseq.load_state_dict(torch.load(os.path.join(opt.re_dir, 'wordseq.pkl')))
 
     for i in tqdm(range(len(test_name))):
         doc_name = test_name[i]
@@ -170,7 +172,7 @@ def test1(data, opt, predict_dir):
 
         test_X, test_other = relation_extraction.getRelationInstanceForOneDoc(doc_token, entities, doc_name, data)
 
-        relations = relation_extraction.evaluateWhenTest1(classify_model, test_X, data, test_other, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']])
+        relations = relation_extraction.evaluateWhenTest1(classify_wordseq, classify_model, test_X, data, test_other, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']])
 
         for relation in relations:
             bioc_relation = bioc.BioCRelation()

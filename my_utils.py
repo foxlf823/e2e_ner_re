@@ -561,8 +561,9 @@ def sorted_collate1(batch):
                 else:
                     x[i] = x[i].cuda(data.HP_gpu)
 
-        if y is not None:
-            y = y.cuda(data.HP_gpu)
+        for i, _ in enumerate(y):
+            if y[i] is not None:
+                y[i] = y[i].cuda(data.HP_gpu)
     return x, y
 
 
@@ -730,12 +731,17 @@ def pad1(x, y, eos_idx):
     et_num = et_num[word_perm_idx]
 
     if y is not None:
-        y = torch.LongTensor(y).view(-1)
-        y = y[word_perm_idx]
+        target = torch.LongTensor(y).view(-1)
+        target_permute = torch.LongTensor(y)[torch.randperm(batch_size)]
+        target = target[word_perm_idx]
+        target_permute = target_permute[word_perm_idx]
+    else:
+        target = None
+        target_permute = None
 
     return [word_seq_tensor, feature_seq_tensors, word_seq_lengths, word_seq_recover, char_seq_tensor, char_seq_lengths,
            char_seq_recover, position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type,
-            e2_type, tok_num_betw, et_num], y
+            e2_type, tok_num_betw, et_num], [target, target_permute]
 
 
 

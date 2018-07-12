@@ -20,7 +20,7 @@ class ClassifyModel(nn.Module):
         relation_alphabet_id = data.re_feature_name2id['[RELATION]']
         label_size = data.re_feature_alphabet_sizes[relation_alphabet_id]
 
-        self.word_hidden = WordSequence(data, True, False, False)
+        # self.word_hidden = WordSequence(data, True, False, False)
 
         self.attn = DotAttentionLayer(data.HP_hidden_dim, self.gpu)
 
@@ -63,12 +63,16 @@ class ClassifyModel(nn.Module):
         self.loss_function = nn.NLLLoss(size_average=self.average_batch)
 
 
-    def neg_log_likelihood_loss(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
-        position1_inputs, position2_inputs, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets):
+    # def neg_log_likelihood_loss(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
+    #     position1_inputs, position2_inputs, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets):
+    #
+    #     hidden_features = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
+    #                                        position1_inputs, position2_inputs)
+    def neg_log_likelihood_loss(self, hidden, hidden_adv, word_seq_lengths, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets):
+        if hidden_adv is not None:
+            hidden = (hidden + hidden_adv)
 
-        hidden_features = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
-                                           position1_inputs, position2_inputs)
-        hidden_features = self.attn((hidden_features, word_seq_lengths))
+        hidden_features = self.attn((hidden, word_seq_lengths))
 
         e1_t = self.entity_type_emb(e1_type)
         e2_t = self.entity_type_emb(e2_type)
@@ -92,11 +96,13 @@ class ClassifyModel(nn.Module):
         return total_loss, tag_seq
 
 
-    def forward(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
-                position1_inputs, position2_inputs, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num):
-        hidden_features = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
-                                           position1_inputs, position2_inputs)
-        hidden_features = self.attn((hidden_features, word_seq_lengths))
+    # def forward(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
+    #             position1_inputs, position2_inputs, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num):
+    #     hidden_features = self.word_hidden(word_inputs,feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
+    #                                        position1_inputs, position2_inputs)
+    def forward(self, hidden, word_seq_lengths, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num):
+
+        hidden_features = self.attn((hidden, word_seq_lengths))
 
         e1_t = self.entity_type_emb(e1_type)
         e2_t = self.entity_type_emb(e2_type)

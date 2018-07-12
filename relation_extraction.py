@@ -11,6 +11,7 @@ import itertools
 import bioc
 import math
 import pandas as pd
+from options import opt
 
 
 import my_utils1
@@ -19,6 +20,7 @@ from feature_extractor import *
 from data_structure import *
 import utils.functions
 from classifymodel import ClassifyModel
+from model.wordsequence import WordSequence
 
 # def dataset_stat(tokens, entities, relations):
 #     word_alphabet = sortedcontainers.SortedSet()
@@ -264,38 +266,123 @@ def train1(data, dir):
     test_loader = DataLoader(my_utils.RelationDataset(data.re_test_X, data.re_test_Y),
                               data.HP_batch_size, shuffle=False, collate_fn=my_collate)
 
-
+    wordseq = WordSequence(data, True, False, False)
     model = ClassifyModel(data)
     if torch.cuda.is_available():
         model = model.cuda(data.HP_gpu)
 
-    optimizer = optim.Adam(model.parameters(), lr=data.HP_lr)
+    if opt.self_adv == 'grad':
+        wordseq_adv = WordSequence(data, True, False, False)
+    elif opt.self_adv == 'label':
+        wordseq_adv = WordSequence(data, True, False, False)
+        model_adv = ClassifyModel(data)
+        if torch.cuda.is_available():
+            model_adv = model_adv.cuda(data.HP_gpu)
+    else:
+        wordseq_adv = None
+
+    if opt.self_adv == 'grad':
+        iter_parameter = itertools.chain(
+            *map(list, [wordseq.parameters(), wordseq_adv.parameters(), model.parameters()]))
+        optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+    elif opt.self_adv == 'label':
+        iter_parameter = itertools.chain(*map(list, [wordseq.parameters(), model.parameters()]))
+        optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+        iter_parameter = itertools.chain(*map(list, [wordseq_adv.parameters(), model_adv.parameters()]))
+        optimizer_adv = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+
+    else:
+        iter_parameter = itertools.chain(*map(list, [wordseq.parameters(), model.parameters()]))
+        optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
 
     if data.tune_wordemb == False:
-        my_utils.freeze_net(model.word_hidden.wordrep.word_embedding)
+        my_utils.freeze_net(wordseq.wordrep.word_embedding)
+        if opt.self_adv != 'no':
+            my_utils.freeze_net(wordseq_adv.wordrep.word_embedding)
 
     best_acc = 0.0
     logging.info("start training ...")
     for epoch in range(data.max_epoch):
-
+        wordseq.train()
+        wordseq.zero_grad()
         model.train()
+        model.zero_grad()
+        if opt.self_adv == 'grad':
+            wordseq_adv.train()
+            wordseq_adv.zero_grad()
+        elif opt.self_adv == 'label':
+            wordseq_adv.train()
+            wordseq_adv.zero_grad()
+            model_adv.train()
+            model_adv.zero_grad()
         correct, total = 0, 0
 
         for i in range(num_iter):
             [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
             batch_char, batch_charlen, batch_charrecover, \
             position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
-            tok_num_betw, et_num], targets = my_utils.endless_get_next_batch_without_rebatch1(train_loader, train_iter)
+            tok_num_betw, et_num], [targets, targets_permute] = my_utils.endless_get_next_batch_without_rebatch1(train_loader, train_iter)
 
 
-            loss, pred = model.neg_log_likelihood_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
-                                                       position1_seq_tensor, position2_seq_tensor,
-                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets)
+            if opt.self_adv == 'grad':
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                hidden_adv = wordseq_adv.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                loss, pred = model.neg_log_likelihood_loss(hidden, hidden_adv, batch_wordlen,
+                                                           e1_token, e1_length, e2_token, e2_length, e1_type, e2_type,
+                                                           tok_num_betw, et_num, targets)
+                loss.backward()
+                my_utils.reverse_grad(wordseq_adv)
+                optimizer.step()
+                wordseq.zero_grad()
+                wordseq_adv.zero_grad()
+                model.zero_grad()
+
+            elif opt.self_adv == 'label' :
+                wordseq.unfreeze_net()
+                wordseq_adv.freeze_net()
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                hidden_adv = wordseq_adv.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                loss, pred = model.neg_log_likelihood_loss(hidden, hidden_adv, batch_wordlen,
+                                                           e1_token, e1_length, e2_token, e2_length, e1_type, e2_type,
+                                                           tok_num_betw, et_num, targets)
+                loss.backward()
+                optimizer.step()
+                wordseq.zero_grad()
+                wordseq_adv.zero_grad()
+                model.zero_grad()
+
+                wordseq.freeze_net()
+                wordseq_adv.unfreeze_net()
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                hidden_adv = wordseq_adv.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                loss_adv, _ = model_adv.neg_log_likelihood_loss(hidden, hidden_adv, batch_wordlen,
+                                                           e1_token, e1_length, e2_token, e2_length, e1_type, e2_type,
+                                                           tok_num_betw, et_num, targets_permute)
+                loss_adv.backward()
+                optimizer_adv.step()
+                wordseq.zero_grad()
+                wordseq_adv.zero_grad()
+                model_adv.zero_grad()
+
+            else:
+                hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                hidden_adv = None
+                loss, pred = model.neg_log_likelihood_loss(hidden, hidden_adv, batch_wordlen,
+                                                           e1_token, e1_length, e2_token, e2_length, e1_type, e2_type,
+                                                           tok_num_betw, et_num, targets)
+                loss.backward()
+                optimizer.step()
+                wordseq.zero_grad()
+                model.zero_grad()
 
 
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
 
             total += targets.size(0)
             correct += (pred == targets).sum().item()
@@ -304,16 +391,18 @@ def train1(data, dir):
             [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
             batch_char, batch_charlen, batch_charrecover, \
             position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
-            tok_num_betw, et_num], targets = my_utils.endless_get_next_batch_without_rebatch1(unk_loader, unk_iter)
+            tok_num_betw, et_num], [targets, targets_permute] = my_utils.endless_get_next_batch_without_rebatch1(unk_loader, unk_iter)
 
-            loss, pred = model.neg_log_likelihood_loss(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
-                                                       position1_seq_tensor, position2_seq_tensor,
-                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets)
-
-
-            optimizer.zero_grad()
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                     batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+            hidden_adv = None
+            loss, pred = model.neg_log_likelihood_loss(hidden, hidden_adv, batch_wordlen,
+                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type,
+                                                       tok_num_betw, et_num, targets)
             loss.backward()
             optimizer.step()
+            wordseq.zero_grad()
+            model.zero_grad()
 
 
         unk_loader, unk_iter = makeDatasetUnknown(data.re_train_X, data.re_train_Y,
@@ -323,13 +412,19 @@ def train1(data, dir):
         logging.info('epoch {} end'.format(epoch))
         logging.info('Train Accuracy: {}%'.format(100.0 * correct / total))
 
-        test_accuracy = evaluate1(model, test_loader)
+        test_accuracy = evaluate1(wordseq, model, test_loader)
         # test_accuracy = evaluate(m, test_loader)
         logging.info('Test Accuracy: {}%'.format(test_accuracy))
 
         if test_accuracy > best_acc:
             best_acc = test_accuracy
+            torch.save(wordseq.state_dict(), os.path.join(dir, 'wordseq.pkl'))
             torch.save(model.state_dict(), '{}/model.pkl'.format(dir))
+            if opt.self_adv == 'grad':
+                torch.save(wordseq_adv.state_dict(), os.path.join(dir, 'wordseq_adv.pkl'))
+            elif opt.self_adv == 'label':
+                torch.save(wordseq_adv.state_dict(), os.path.join(dir, 'wordseq_adv.pkl'))
+                torch.save(model_adv.state_dict(), os.path.join(dir, 'model_adv.pkl'))
             logging.info('New best accuracy: {}'.format(best_acc))
 
 
@@ -378,8 +473,8 @@ def evaluate(feature_extractor, m, loader, other):
     acc = 100.0 * correct / total
     return acc
 
-def evaluate1(model, loader):
-
+def evaluate1(wordseq, model, loader):
+    wordseq.eval()
     model.eval()
     it = iter(loader)
     correct = 0
@@ -388,14 +483,13 @@ def evaluate1(model, loader):
     for [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
             batch_char, batch_charlen, batch_charrecover, \
             position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
-            tok_num_betw, et_num], targets in it:
+            tok_num_betw, et_num], [targets, targets_permute] in it:
 
 
         with torch.no_grad():
-
-            pred = model.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
-                                 position1_seq_tensor, position2_seq_tensor,
-                                                       e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                     batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+            pred = model.forward(hidden, batch_wordlen, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
 
             total += targets.size(0)
             correct += (pred == targets).sum().data.item()
@@ -467,8 +561,8 @@ def evaluateWhenTest(feature_extractor, m, instances, data, test_other, relation
 
     return relations
 
-def evaluateWhenTest1(model, instances, data, test_other, relationVocab):
-
+def evaluateWhenTest1(wordseq, model, instances, data, test_other, relationVocab):
+    wordseq.eval()
     model.eval()
     batch_size = data.HP_batch_size
 
@@ -489,12 +583,12 @@ def evaluateWhenTest1(model, instances, data, test_other, relationVocab):
         [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
          batch_char, batch_charlen, batch_charrecover, \
          position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
-         tok_num_betw, et_num], targets = my_utils.sorted_collate1(instance)
+         tok_num_betw, et_num], [targets, targets_permute] = my_utils.sorted_collate1(instance)
 
         with torch.no_grad():
-
-            pred = model.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover,
-                                 position1_seq_tensor, position2_seq_tensor,
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                     batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+            pred = model.forward(hidden, batch_wordlen,
                                  e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
 
             pred = pred.index_select(0, batch_wordrecover)

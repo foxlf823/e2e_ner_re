@@ -9,6 +9,7 @@ from test import *
 import ner
 import relation_extraction
 from utils.data import data
+import joint_train
 
 
 logger = logging.getLogger()
@@ -81,15 +82,19 @@ elif opt.whattodo==2:
     data.load(opt.data_file)
     data.HP_iteration = opt.ner_iter
     data.max_epoch = opt.re_iter
-
+    data.HP_gpu = opt.gpu
     data.show_data_summary()
 
-    if opt.ner_iter > 0:
-        ner.train(data, opt.ner_dir)
+    if opt.mutual_adv != 'no':
+        joint_train.joint_train(data, opt.ner_dir, opt.re_dir)
+    else:
+        if opt.ner_iter > 0:
+            ner.train(data, opt.ner_dir)
 
-    if opt.re_iter > 0:
-        # relation_extraction.train(data, opt.re_dir)
-        relation_extraction.train1(data, opt.re_dir)
+        if opt.re_iter > 0:
+            # relation_extraction.train(data, opt.re_dir)
+            relation_extraction.train1(data, opt.re_dir)
+
 
 elif opt.whattodo==3:
 
