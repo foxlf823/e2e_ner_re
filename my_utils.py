@@ -774,8 +774,8 @@ def endless_get_next_batch_without_rebatch1(loaders, iters):
         iters = iter(loaders)
         x, y = next(iters)
 
-    if len(y) < 2:
-        return endless_get_next_batch_without_rebatch(loaders, iters)
+    if len(y[0]) < 2:
+        return endless_get_next_batch_without_rebatch1(loaders, iters)
     return x, y
 
 

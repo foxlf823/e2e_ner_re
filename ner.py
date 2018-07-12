@@ -242,6 +242,54 @@ def recover_label(pred_variable, gold_variable, mask_variable, label_alphabet, w
     return pred_label, gold_label
 
 
+def evaluate1(data, wordseq, model, name):
+    if name == "train":
+        instances = data.train_Ids
+    elif name == "dev":
+        instances = data.dev_Ids
+    elif name == 'test':
+        instances = data.test_Ids
+    elif name == 'raw':
+        instances = data.raw_Ids
+    else:
+        print "Error: wrong evaluate name,", name
+
+    wordseq.eval()
+    model.eval()
+    batch_size = data.HP_batch_size
+
+    correct = 0
+    total = 0
+
+    train_num = len(instances)
+    total_batch = train_num//batch_size+1
+    for batch_id in range(total_batch):
+        start = batch_id*batch_size
+        end = (batch_id+1)*batch_size
+        if end > train_num:
+            end =  train_num
+        instance = instances[start:end]
+        if not instance:
+            continue
+
+        with torch.no_grad():
+            batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, _ = batchify_with_label(instance, data.HP_gpu, True)
+
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,batch_charrecover, None, None)
+            tag_seq = model(hidden, mask)
+
+
+        for idx in range(mask.shape[0]):
+            for idy in range(mask.shape[1]):
+                if mask[idx][idy] != 0:
+                    total += 1
+                    if tag_seq[idx][idy] == batch_label[idx][idy]:
+                        correct += 1
+
+
+    acc = 1.0 * correct / total
+    return acc
+
 
 def evaluate(data, wordseq, model, name, nbest=None):
     if name == "train":
@@ -349,7 +397,7 @@ def train(data, model_file):
     for idx in range(data.HP_iteration):
         epoch_start = time.time()
         temp_start = epoch_start
-        print("Epoch: %s/%s" % (idx, data.HP_iteration))
+        print("epoch: %s/%s" % (idx, data.HP_iteration))
         if data.optimizer == "SGD":
             optimizer = lr_decay(optimizer, idx, data.HP_lr_decay, data.HP_lr)
         instance_count = 0
@@ -456,7 +504,7 @@ def train(data, model_file):
 
         epoch_finish = time.time()
         epoch_cost = epoch_finish - epoch_start
-        print("Epoch: %s training finished. Time: %.2fs, speed: %.2fst/s,  total loss: %s" % (
+        print("epoch: %s training finished. Time: %.2fs, speed: %.2fst/s,  total loss: %s" % (
         idx, epoch_cost, train_num / epoch_cost, total_loss))
         print "totalloss:", total_loss
         if total_loss > 1e8 or str(total_loss) == "nan":
