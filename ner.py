@@ -242,6 +242,58 @@ def recover_label(pred_variable, gold_variable, mask_variable, label_alphabet, w
     return pred_label, gold_label
 
 
+def evaluate2(data, wordseq, wordseq_shared, model, name): # shared-private
+    if name == "train":
+        instances = data.train_Ids
+    elif name == "dev":
+        instances = data.dev_Ids
+    elif name == 'test':
+        instances = data.test_Ids
+    elif name == 'raw':
+        instances = data.raw_Ids
+    else:
+        print "Error: wrong evaluate name,", name
+
+    wordseq.eval()
+    wordseq_shared.eval()
+    model.eval()
+    batch_size = data.HP_batch_size
+
+    correct = 0
+    total = 0
+
+    train_num = len(instances)
+    total_batch = train_num//batch_size+1
+    for batch_id in range(total_batch):
+        start = batch_id*batch_size
+        end = (batch_id+1)*batch_size
+        if end > train_num:
+            end =  train_num
+        instance = instances[start:end]
+        if not instance:
+            continue
+
+        with torch.no_grad():
+            batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, _ = batchify_with_label(instance, data.HP_gpu, True)
+
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,batch_charrecover, None, None)
+            hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
+
+            tag_seq = model.forward(hidden, hidden_shared, mask)
+
+
+        for idx in range(mask.shape[0]):
+            for idy in range(mask.shape[1]):
+                if mask[idx][idy] != 0:
+                    total += 1
+                    if tag_seq[idx][idy] == batch_label[idx][idy]:
+                        correct += 1
+
+
+    acc = 1.0 * correct / total
+    return acc
+
+
 def evaluate1(data, wordseq, model, name):
     if name == "train":
         instances = data.train_Ids
@@ -592,6 +644,34 @@ def evaluateWhenTest(data, wordseq, model):
         batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, _  = batchify_with_label(instance, data.HP_gpu, True)
         hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
         scores, nbest_tag_seq = model.decode_nbest(hidden, mask, data.nbest)
+        nbest_pred_result = recover_nbest_label(nbest_tag_seq, mask, data.label_alphabet, batch_wordrecover)
+        nbest_pred_results += nbest_pred_result
+
+    return nbest_pred_results
+
+def evaluateWhenTest1(data, wordseq, wordseq_shared, model): # shared-private
+
+    instances = data.raw_Ids
+    nbest_pred_results = []
+    wordseq.eval()
+    wordseq_shared.eval()
+    model.eval()
+    batch_size = data.HP_batch_size
+
+    train_num = len(instances)
+    total_batch = train_num//batch_size+1
+    for batch_id in range(total_batch):
+        start = batch_id*batch_size
+        end = (batch_id+1)*batch_size
+        if end > train_num:
+            end = train_num
+        instance = instances[start:end]
+        if not instance:
+            continue
+        batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, _  = batchify_with_label(instance, data.HP_gpu, True)
+        hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen, batch_charrecover, None, None)
+        hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
+        scores, nbest_tag_seq = model.decode_nbest(hidden, hidden_shared, mask, data.nbest)
         nbest_pred_result = recover_nbest_label(nbest_tag_seq, mask, data.label_alphabet, batch_wordrecover)
         nbest_pred_results += nbest_pred_result
 

@@ -83,22 +83,36 @@ elif opt.whattodo==2:
     data.HP_iteration = opt.ner_iter
     data.max_epoch = opt.re_iter
     data.HP_gpu = opt.gpu
+    data.unk_ratio = opt.unk_ratio
     data.show_data_summary()
 
-    if opt.mutual_adv != 'no':
-        joint_train.joint_train(data, opt.ner_dir, opt.re_dir)
+    if opt.shared != 'no':
+        joint_train.joint_train1(data, opt.ner_dir, opt.re_dir)
     else:
-        if opt.ner_iter > 0:
-            ner.train(data, opt.ner_dir)
 
-        if opt.re_iter > 0:
-            # relation_extraction.train(data, opt.re_dir)
-            relation_extraction.train1(data, opt.re_dir)
+        if opt.mutual_adv == 'grad' or opt.mutual_adv == 'label':
+            joint_train.joint_train(data, opt.ner_dir, opt.re_dir)
+        elif opt.self_adv == 'grad' or opt.self_adv == 'label':
+            if opt.ner_iter > 0:
+                ner.train(data, opt.ner_dir)
+            if opt.re_iter > 0:
+                relation_extraction.train(data, opt.re_dir)
+        else:
+            # select one of the below method as the training method
+            joint_train.joint_train(data, opt.ner_dir, opt.re_dir)
+
+            # if opt.ner_iter > 0:
+            #     ner.train(data, opt.ner_dir)
+            #
+            # if opt.re_iter > 0:
+            #     relation_extraction.train1(data, opt.re_dir)
 
 
 elif opt.whattodo==3:
 
-    # test(data, opt, predict_dir)
-    test1(data, opt, predict_dir)
+    if opt.shared != 'no':
+        test1(data, opt, predict_dir)
+    else:
+        test(data, opt, predict_dir)
 
 

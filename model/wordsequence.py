@@ -13,7 +13,7 @@ from wordrep import WordRep
 import my_utils
 
 class WordSequence(nn.Module):
-    def __init__(self, data, use_position, use_cap, use_char):
+    def __init__(self, data, use_position, use_cap, use_postag, use_char):
         super(WordSequence, self).__init__()
         print("build word sequence feature extractor: %s..."%(data.word_feature_extractor))
         self.gpu = data.HP_gpu
@@ -23,7 +23,7 @@ class WordSequence(nn.Module):
         self.droplstm = nn.Dropout(data.HP_dropout)
         self.bilstm_flag = data.HP_bilstm
         self.lstm_layer = data.HP_lstm_layer
-        self.wordrep = WordRep(data, use_position, use_cap, use_char)
+        self.wordrep = WordRep(data, use_position, use_cap, use_postag, use_char)
         self.tune_wordemb = data.tune_wordemb
 
         self.input_size = data.word_emb_dim
@@ -33,9 +33,8 @@ class WordSequence(nn.Module):
                 self.input_size += data.HP_char_hidden_dim
 
         if use_cap:
-            for idx in range(data.feature_num):
-                self.input_size += data.feature_emb_dims[idx]
-        else:
+            self.input_size += data.feature_emb_dims[data.feature_name2id['[Cap]']]
+        if use_postag:
             self.input_size += data.feature_emb_dims[data.feature_name2id['[POS]']]
 
         self.use_position = use_position
@@ -81,6 +80,8 @@ class WordSequence(nn.Module):
             else:
                 self.lstm = self.lstm.cuda(self.gpu)
 
+        self.frozen = False
+
 
     def forward(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
                 position1_inputs, position2_inputs):
@@ -118,12 +119,18 @@ class WordSequence(nn.Module):
         return feature_out
 
     def freeze_net(self):
+        if self.frozen:
+            return
+        self.frozen = True
 
         for p in self.parameters():
             p.requires_grad = False
 
 
     def unfreeze_net(self):
+        if not self.frozen:
+            return
+        self.frozen = False
 
         for p in self.parameters():
             p.requires_grad = True

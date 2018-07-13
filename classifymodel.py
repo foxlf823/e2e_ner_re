@@ -62,6 +62,8 @@ class ClassifyModel(nn.Module):
 
         self.loss_function = nn.NLLLoss(size_average=self.average_batch)
 
+        self.frozen = False
+
 
     # def neg_log_likelihood_loss(self, word_inputs, feature_inputs, word_seq_lengths, char_inputs, char_seq_lengths, char_seq_recover,
     #     position1_inputs, position2_inputs, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets):
@@ -125,6 +127,22 @@ class ClassifyModel(nn.Module):
 
         return tag_seq
 
+    def freeze_net(self):
+        if self.frozen:
+            return
+        self.frozen = True
+
+        for p in self.parameters():
+            p.requires_grad = False
+
+    def unfreeze_net(self):
+        if not self.frozen:
+            return
+        self.frozen = False
+
+        for p in self.parameters():
+            p.requires_grad = True
+
 
 
 class DotAttentionLayer(nn.Module):
@@ -155,3 +173,142 @@ class DotAttentionLayer(nn.Module):
         alphas = alphas / torch.sum(alphas, 1).view(-1, 1)
         output = torch.bmm(alphas.unsqueeze(1), inputs).squeeze(1)
         return output
+
+
+class ClassifyModel1(nn.Module): # shared-private
+    def __init__(self, data):
+        super(ClassifyModel1, self).__init__()
+
+        print "build classify network..."
+
+
+        self.gpu = data.HP_gpu
+        self.average_batch = data.average_batch_loss
+
+        relation_alphabet_id = data.re_feature_name2id['[RELATION]']
+        label_size = data.re_feature_alphabet_sizes[relation_alphabet_id]
+
+        # self.word_hidden = WordSequence(data, True, False, False)
+
+        self.attn = DotAttentionLayer(2*data.HP_hidden_dim, self.gpu)
+
+        # instance-level feature
+        entity_type_alphabet_id = data.re_feature_name2id['[ENTITY_TYPE]']
+        self.entity_type_emb = nn.Embedding(data.re_feature_alphabets[entity_type_alphabet_id].size(),
+                                       data.re_feature_emb_dims[entity_type_alphabet_id], data.pad_idx)
+        self.entity_type_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[entity_type_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[entity_type_alphabet_id])))
+
+        entity_alphabet_id = data.re_feature_name2id['[ENTITY]']
+        self.entity_emb = nn.Embedding(data.re_feature_alphabets[entity_alphabet_id].size(),
+                                       data.re_feature_emb_dims[entity_alphabet_id], data.pad_idx)
+        self.entity_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[entity_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[entity_alphabet_id])))
+
+        self.dot_att = DotAttentionLayer(data.re_feature_emb_dims[entity_alphabet_id], data.HP_gpu)
+
+        tok_num_alphabet_id = data.re_feature_name2id['[TOKEN_NUM]']
+        self.tok_num_betw_emb = nn.Embedding(data.re_feature_alphabets[tok_num_alphabet_id].size(),
+                                       data.re_feature_emb_dims[tok_num_alphabet_id], data.pad_idx)
+        self.tok_num_betw_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[tok_num_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[tok_num_alphabet_id])))
+
+        et_num_alphabet_id = data.re_feature_name2id['[ENTITY_NUM]']
+        self.et_num_emb = nn.Embedding(data.re_feature_alphabets[et_num_alphabet_id].size(),
+                                       data.re_feature_emb_dims[et_num_alphabet_id], data.pad_idx)
+        self.et_num_emb.weight.data.copy_(
+                torch.from_numpy(my_utils.random_embedding(data.re_feature_alphabets[et_num_alphabet_id].size(),
+                                                           data.re_feature_emb_dims[et_num_alphabet_id])))
+
+        self.input_size = 2*data.HP_hidden_dim + 2 * data.re_feature_emb_dims[entity_type_alphabet_id] + 2 * data.re_feature_emb_dims[entity_alphabet_id] + \
+                          data.re_feature_emb_dims[tok_num_alphabet_id] + data.re_feature_emb_dims[et_num_alphabet_id]
+
+        self.linear = nn.Linear(self.input_size, label_size, bias=False)
+
+        self.loss_function = nn.NLLLoss(size_average=self.average_batch)
+
+        self.frozen = False
+
+        if torch.cuda.is_available():
+            self.attn = self.attn.cuda(data.HP_gpu)
+            self.entity_type_emb = self.entity_type_emb.cuda(data.HP_gpu)
+            self.entity_emb = self.entity_emb.cuda(data.HP_gpu)
+            self.dot_att = self.dot_att.cuda(data.HP_gpu)
+            self.tok_num_betw_emb = self.tok_num_betw_emb.cuda(data.HP_gpu)
+            self.et_num_emb = self.et_num_emb.cuda(data.HP_gpu)
+            self.linear = self.linear.cuda(data.HP_gpu)
+
+
+    def neg_log_likelihood_loss(self, hidden, hidden_share, word_seq_lengths, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num, targets):
+        hidden = torch.cat((hidden, hidden_share), dim=2)
+
+        hidden_features = self.attn((hidden, word_seq_lengths))
+
+        e1_t = self.entity_type_emb(e1_type)
+        e2_t = self.entity_type_emb(e2_type)
+
+        e1 = self.entity_emb(e1_token)
+        e1 = self.dot_att((e1, e1_length))
+        e2 = self.entity_emb(e2_token)
+        e2 = self.dot_att((e2, e2_length))
+
+        v_tok_num_betw = self.tok_num_betw_emb(tok_num_betw)
+
+        v_et_num = self.et_num_emb(et_num)
+
+        x = torch.cat((hidden_features, e1_t, e2_t, e1, e2, v_tok_num_betw, v_et_num), dim=1)
+
+        outs = self.linear(x)
+
+        score = F.log_softmax(outs, 1)
+        total_loss = self.loss_function(score, targets)
+        _, tag_seq = torch.max(score, 1)
+        return total_loss, tag_seq
+
+
+    def forward(self, hidden, hidden_share, word_seq_lengths, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num):
+        hidden = torch.cat((hidden, hidden_share), dim=2)
+
+        hidden_features = self.attn((hidden, word_seq_lengths))
+
+        e1_t = self.entity_type_emb(e1_type)
+        e2_t = self.entity_type_emb(e2_type)
+
+        e1 = self.entity_emb(e1_token)
+        e1 = self.dot_att((e1, e1_length))
+        e2 = self.entity_emb(e2_token)
+        e2 = self.dot_att((e2, e2_length))
+
+        v_tok_num_betw = self.tok_num_betw_emb(tok_num_betw)
+
+        v_et_num = self.et_num_emb(et_num)
+
+        x = torch.cat((hidden_features, e1_t, e2_t, e1, e2, v_tok_num_betw, v_et_num), dim=1)
+
+        outs = self.linear(x)
+
+
+        _, tag_seq = torch.max(outs, 1)
+
+        return tag_seq
+
+    def freeze_net(self):
+        if self.frozen:
+            return
+        self.frozen = True
+
+        for p in self.parameters():
+            p.requires_grad = False
+
+    def unfreeze_net(self):
+        if not self.frozen:
+            return
+        self.frozen = False
+
+        for p in self.parameters():
+            p.requires_grad = True
+
+

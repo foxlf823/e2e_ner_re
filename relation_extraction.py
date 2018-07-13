@@ -66,7 +66,7 @@ def makeDatasetUnknown(test_X, test_Y, relation_vocab, my_collate, ratio, batch_
     return test_loader, it
 
 
-def train1(data, dir):
+def train(data, dir):
 
     my_collate = my_utils.sorted_collate1
 
@@ -223,7 +223,7 @@ def train1(data, dir):
         logging.info('epoch {} end'.format(epoch))
         logging.info('Train Accuracy: {}%'.format(100.0 * correct / total))
 
-        test_accuracy = evaluate1(wordseq, model, test_loader)
+        test_accuracy = evaluate(wordseq, model, test_loader)
         # test_accuracy = evaluate(m, test_loader)
         logging.info('Test Accuracy: {}%'.format(test_accuracy))
 
@@ -242,8 +242,34 @@ def train1(data, dir):
     logging.info("training completed")
 
 
+def evaluate1(wordseq, wordseq_shared, model, loader): # shared-private
+    wordseq.eval()
+    wordseq_shared.eval()
+    model.eval()
+    it = iter(loader)
+    correct = 0
+    total = 0
 
-def evaluate1(wordseq, model, loader):
+    for [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
+            batch_char, batch_charlen, batch_charrecover, \
+            position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
+            tok_num_betw, et_num], [targets, targets_permute] in it:
+
+
+        with torch.no_grad():
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                     batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+            hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
+            pred = model.forward(hidden, hidden_shared, batch_wordlen, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
+
+            total += targets.size(0)
+            correct += (pred == targets).sum().data.item()
+
+    # acc = 100.0 * correct / total
+    acc = 1.0 * correct / total
+    return acc
+
+def evaluate(wordseq, model, loader):
     wordseq.eval()
     model.eval()
     it = iter(loader)
@@ -269,7 +295,7 @@ def evaluate1(wordseq, model, loader):
     return acc
 
 
-def evaluateWhenTest1(wordseq, model, instances, data, test_other, relationVocab):
+def evaluateWhenTest(wordseq, model, instances, data, test_other, relationVocab):
     wordseq.eval()
     model.eval()
     batch_size = data.HP_batch_size
@@ -297,6 +323,60 @@ def evaluateWhenTest1(wordseq, model, instances, data, test_other, relationVocab
             hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
                                      batch_charrecover, position1_seq_tensor, position2_seq_tensor)
             pred = model.forward(hidden, batch_wordlen,
+                                 e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
+
+            pred = pred.index_select(0, batch_wordrecover)
+
+
+        for i in range(start,end):
+
+            former = test_other[i][0]
+            latter = test_other[i][1]
+
+            relation_type = relationVocab.get_instance(pred[i-start].item())
+            if relation_type == '</unk>':
+                continue
+            elif relationConstraint1(relation_type, former.type, latter.type) == False:
+                continue
+            else:
+                relation = Relation()
+                relation.create(str(relation_id), relation_type, former, latter)
+                relations.append(relation)
+
+                relation_id += 1
+
+    return relations
+
+def evaluateWhenTest1(wordseq, wordseq_shared, model, instances, data, test_other, relationVocab): # shared-private
+    wordseq.eval()
+    wordseq_shared.eval()
+    model.eval()
+    batch_size = data.HP_batch_size
+
+    relations = []
+    relation_id = 1
+
+    train_num = len(instances)
+    total_batch = train_num//batch_size+1
+    for batch_id in range(total_batch):
+        start = batch_id*batch_size
+        end = (batch_id+1)*batch_size
+        if end > train_num:
+            end = train_num
+        instance = instances[start:end]
+        if not instance:
+            continue
+
+        [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
+         batch_char, batch_charlen, batch_charrecover, \
+         position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
+         tok_num_betw, et_num], [targets, targets_permute] = my_utils.sorted_collate1(instance)
+
+        with torch.no_grad():
+            hidden = wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                     batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+            hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
+            pred = model.forward(hidden, hidden_shared, batch_wordlen,
                                  e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
 
             pred = pred.index_select(0, batch_wordrecover)

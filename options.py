@@ -15,7 +15,8 @@ parser.add_argument('-self_adv', default='no', help='no, grad, label')
 parser.add_argument('-lambd', type=float, default=0.05)
 parser.add_argument('-gpu', type=int, default=0)
 parser.add_argument('-mutual_adv', default='no', help='no, grad, label')
-
+parser.add_argument('-shared', default='no', help='no, yes')
+parser.add_argument('-unk_ratio', type=float, default=0.03)
 
 opt = parser.parse_args()
 
