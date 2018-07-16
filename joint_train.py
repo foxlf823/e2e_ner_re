@@ -269,7 +269,7 @@ def joint_train(data, ner_dir, re_dir):
         ner_score = ner.evaluate1(data, seq_wordseq, seq_model, "test")
         print("ner evaluate: f: %.4f" % (ner_score))
 
-        re_score = relation_extraction.evaluate1(classify_wordseq, classify_model, re_test_loader)
+        re_score = relation_extraction.evaluate(classify_wordseq, classify_model, re_test_loader)
         print("re evaluate: f: %.4f" % (re_score))
 
         if ner_score+re_score > best_ner_score+best_re_score:
