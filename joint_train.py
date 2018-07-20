@@ -359,7 +359,7 @@ def joint_train1(data, ner_dir, re_dir):
         re_total_batch = len(re_train_loader)
 
         total_batch = max(ner_total_batch, re_total_batch)
-        min_batch = min(ner_total_batch, re_total_batch)
+        # min_batch = min(ner_total_batch, re_total_batch)
 
         for batch_id in range(total_batch):
 
@@ -373,16 +373,16 @@ def joint_train1(data, ner_dir, re_dir):
                 batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, \
                     batch_permute_label = batchify_with_label(instance, data.HP_gpu)
 
-                if batch_id < min_batch:
-                    hidden = seq_wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
-                                             batch_charrecover, None, None)
-                    hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
-                    loss, tag_seq = seq_model.neg_log_likelihood_loss(hidden, hidden_shared, batch_label, mask)
-                    loss.backward()
-                    seq_optimizer.step()
-                    seq_wordseq.zero_grad()
-                    wordseq_shared.zero_grad()
-                    seq_model.zero_grad()
+                # if batch_id < min_batch:
+                hidden = seq_wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, None, None)
+                hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
+                loss, tag_seq = seq_model.neg_log_likelihood_loss(hidden, hidden_shared, batch_label, mask)
+                loss.backward()
+                seq_optimizer.step()
+                seq_wordseq.zero_grad()
+                wordseq_shared.zero_grad()
+                seq_model.zero_grad()
 
             if batch_id < re_total_batch:
                 [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
@@ -391,19 +391,19 @@ def joint_train1(data, ner_dir, re_dir):
                  tok_num_betw, et_num], [targets, targets_permute] = my_utils.endless_get_next_batch_without_rebatch1(
                     re_train_loader, re_train_iter)
 
-                if batch_id < min_batch:
-                    hidden = classify_wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
-                                             batch_charrecover, position1_seq_tensor, position2_seq_tensor)
-                    hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
-                    loss, pred = classify_model.neg_log_likelihood_loss(hidden, hidden_shared, batch_wordlen,
-                                                               e1_token, e1_length, e2_token, e2_length, e1_type,
-                                                               e2_type,
-                                                               tok_num_betw, et_num, targets)
-                    loss.backward()
-                    classify_optimizer.step()
-                    classify_wordseq.zero_grad()
-                    wordseq_shared.zero_grad()
-                    classify_model.zero_grad()
+                # if batch_id < min_batch:
+                hidden = classify_wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                         batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+                hidden_shared = wordseq_shared.forward(batch_word, None, batch_wordlen, None, None, None, None, None)
+                loss, pred = classify_model.neg_log_likelihood_loss(hidden, hidden_shared, batch_wordlen,
+                                                           e1_token, e1_length, e2_token, e2_length, e1_type,
+                                                           e2_type,
+                                                           tok_num_betw, et_num, targets)
+                loss.backward()
+                classify_optimizer.step()
+                classify_wordseq.zero_grad()
+                wordseq_shared.zero_grad()
+                classify_model.zero_grad()
 
 
         epoch_finish = time.time()

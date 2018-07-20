@@ -10,6 +10,8 @@ import ner
 import relation_extraction
 from utils.data import data
 import joint_train
+import shared_reg
+import shared_soft
 
 
 logger = logging.getLogger()
@@ -86,8 +88,12 @@ elif opt.whattodo==2:
     data.unk_ratio = opt.unk_ratio
     data.show_data_summary()
 
-    if opt.shared != 'no':
+    if opt.shared == 'hard':
         joint_train.joint_train1(data, opt.ner_dir, opt.re_dir)
+    elif opt.shared == 'reg':
+        shared_reg.train(data, opt.ner_dir, opt.re_dir)
+    elif opt.shared == 'soft':
+        shared_soft.train(data, opt.ner_dir, opt.re_dir)
     else:
 
         if opt.mutual_adv == 'grad' or opt.mutual_adv == 'label':
@@ -110,8 +116,12 @@ elif opt.whattodo==2:
 
 elif opt.whattodo==3:
 
-    if opt.shared != 'no':
+    if opt.shared == 'hard':
         test1(data, opt, predict_dir)
+    elif opt.shared == 'reg':
+        shared_reg.test(data, opt, predict_dir)
+    elif opt.shared == 'soft':
+        shared_soft.test(data, opt, predict_dir)
     else:
         test(data, opt, predict_dir)
 
