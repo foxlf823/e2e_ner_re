@@ -12,6 +12,7 @@ from utils.data import data
 import joint_train
 import shared_reg
 import shared_soft
+import shared_stitch
 
 
 logger = logging.getLogger()
@@ -94,6 +95,8 @@ elif opt.whattodo==2:
         shared_reg.train(data, opt.ner_dir, opt.re_dir)
     elif opt.shared == 'soft':
         shared_soft.train(data, opt.ner_dir, opt.re_dir)
+    elif opt.shared == 'stitch':
+        shared_stitch.train(data, opt.ner_dir, opt.re_dir)
     else:
 
         if opt.mutual_adv == 'grad' or opt.mutual_adv == 'label':
@@ -122,6 +125,8 @@ elif opt.whattodo==3:
         shared_reg.test(data, opt, predict_dir)
     elif opt.shared == 'soft':
         shared_soft.test(data, opt, predict_dir)
+    elif opt.shared == 'stitch':
+        shared_stitch.test(data, opt, predict_dir)
     else:
         test(data, opt, predict_dir)
 

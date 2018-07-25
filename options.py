@@ -15,10 +15,12 @@ parser.add_argument('-self_adv', default='no', help='no, grad, label')
 parser.add_argument('-lambd', type=float, default=0.05)
 parser.add_argument('-gpu', type=int, default=0)
 parser.add_argument('-mutual_adv', default='no', help='no, grad, label')
-parser.add_argument('-shared', default='no', help='no, hard, reg, soft')
+parser.add_argument('-shared', default='no', help='no, hard, reg, soft, stitch')
 parser.add_argument('-unk_ratio', type=float, default=0.03)
 parser.add_argument('-reg_hp', type=float, default=0.001)
 parser.add_argument('-hidden_num', type=int, default=1)
+parser.add_argument('-lamda', type=float, default=0.001)
+parser.add_argument('-att_size', type=int, default=50)
 
 opt = parser.parse_args()
 
