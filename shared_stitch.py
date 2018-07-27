@@ -948,7 +948,7 @@ def re_evaluateWhenTest(wordrep, hiddenlist, model, instances, data, test_other,
 
             re_hidden = re_word_rep
             for i in range(opt.hidden_num):
-                re_lstm_out, re_att_out = hiddenlist[i].forward(re_hidden, batch_wordlen, False)
+                re_lstm_out, re_att_out = hiddenlist[i].forward(re_hidden, batch_wordlen)
 
                 re_hidden = torch.cat((re_lstm_out, re_att_out.unsqueeze(1).expand(-1, re_lstm_out.size(1), -1)), 2)
 

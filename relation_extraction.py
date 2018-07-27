@@ -21,6 +21,8 @@ from data_structure import *
 import utils.functions
 from classifymodel import ClassifyModel
 from model.wordsequence import WordSequence
+import my_utils
+
 
 
 def makeDatasetWithoutUnknown(test_X, test_Y, relation_vocab, b_shuffle, my_collate, batch_size):

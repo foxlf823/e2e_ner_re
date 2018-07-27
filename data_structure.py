@@ -33,6 +33,18 @@ class Entity:
     def getlength(self):
         return self.end-self.start
 
+    def equals(self, other):
+        if self.type == other.type and self.start == other.start and self.end == other.end:
+            return True
+        else:
+            return False
+
+    def equals_cotype(self, other):
+        if self.start == other.start and self.end == other.end:
+            return True
+        else:
+            return False
+
 class Relation:
     def __init__(self):
         self.id = None
@@ -46,4 +58,19 @@ class Relation:
         self.node1 = node1
         self.node2 = node2
 
+    def equals(self, other):
+        if self.type == other.type and self.node1.equals(other.node1) and self.node2.equals(other.node2):
+            return True
+        elif self.type == other.type and self.node1.equals(other.node2) and self.node2.equals(other.node1):
+            return True
+        else:
+            return False
 
+
+    def equals_cotype(self, other):
+        if self.type == other.type and self.node1.equals_cotype(other.node1) and self.node2.equals_cotype(other.node2):
+            return True
+        elif self.type == other.type and self.node1.equals_cotype(other.node2) and self.node2.equals_cotype(other.node1):
+            return True
+        else:
+            return False

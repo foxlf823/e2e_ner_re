@@ -197,6 +197,7 @@ class Data:
         print("     Hyper      lstm_layer: %s"%(self.HP_lstm_layer))
         print("     Hyper          bilstm: %s"%(self.HP_bilstm))
         print("     Hyper             GPU: %s"%(self.HP_gpu))
+        print("     Hyper             NBEST: %s"%(self.nbest))
 
         print(" " + "++" * 20)
         print(" Both:")
