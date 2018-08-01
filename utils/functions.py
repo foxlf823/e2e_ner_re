@@ -116,25 +116,75 @@ def norm2one(vec):
     root_sum_square = np.sqrt(np.sum(np.square(vec)))
     return vec/root_sum_square
 
+# def _readString(f):
+#     try:
+#         s = str()
+#         b = f.read(1)
+#         c = b.decode('utf-8')
+#         while c != '\n' and c != ' ':
+#             s = s + c
+#             b = f.read(1)
+#             c = b.decode('utf-8')
+#     except Exception, e:
+#         pass
+#     return s
+
+def _readString(f):
+    s = str()
+    c = f.read(1).decode('iso-8859-1')
+    while c != '\n' and c != ' ':
+        s = s + c
+        c = f.read(1).decode('iso-8859-1')
+
+    return s
+
+import struct
+def _readFloat(f):
+    bytes4 = f.read(4)
+    f_num = struct.unpack('f', bytes4)[0]
+    return f_num
+
 def load_pretrain_emb(embedding_path):
     embedd_dim = -1
     embedd_dict = dict()
-    with open(embedding_path, 'r') as file:
-        for line in file:
-            line = line.strip()
-            if len(line) == 0:
-                continue
-            tokens = line.split()
-            # feili
-            if len(tokens) == 2:
-                continue # it's a head
-            if embedd_dim < 0:
-                embedd_dim = len(tokens) - 1
-            else:
-                assert (embedd_dim + 1 == len(tokens))
-            embedd = np.empty([1, embedd_dim])
-            embedd[:] = tokens[1:]
-            embedd_dict[tokens[0].decode('utf-8')] = embedd
+    # emb_debug = []
+    if embedding_path.find('.bin') != -1:
+        with open(embedding_path, 'rb') as f:
+            wordTotal = int(_readString(f))
+            embedd_dim = int(_readString(f))
+
+            for i in range(wordTotal):
+                word = _readString(f)
+                # emb_debug.append(word)
+
+                word_vector = []
+                for j in range(embedd_dim):
+                    word_vector.append(_readFloat(f))
+                word_vector = np.array(word_vector, np.float)
+
+                f.read(1)  # a line break
+                try:
+                    embedd_dict[word.decode('utf-8')] = word_vector
+                except Exception , e:
+                    pass
+    else:
+        with open(embedding_path, 'r') as file:
+            for line in file:
+                line = line.strip()
+                if len(line) == 0:
+                    continue
+                tokens = line.split()
+                # feili
+                if len(tokens) == 2:
+                    continue # it's a head
+                if embedd_dim < 0:
+                    embedd_dim = len(tokens) - 1
+                else:
+                    assert (embedd_dim + 1 == len(tokens))
+                embedd = np.empty([1, embedd_dim])
+                embedd[:] = tokens[1:]
+                embedd_dict[tokens[0].decode('utf-8')] = embedd
+
     return embedd_dict, embedd_dim
 
 if __name__ == '__main__':

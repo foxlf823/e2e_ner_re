@@ -21,6 +21,9 @@ parser.add_argument('-reg_hp', type=float, default=0.001)
 parser.add_argument('-hidden_num', type=int, default=1)
 parser.add_argument('-lamda', type=float, default=0.001)
 parser.add_argument('-att_size', type=int, default=50)
+parser.add_argument('-word_emb', default='no')
+parser.add_argument('-tune_wordemb', action='store_true', default=False)
+
 
 opt = parser.parse_args()
 

@@ -40,7 +40,7 @@ class Entity:
             return False
 
     def equals_cotype(self, other):
-        if self.start == other.start and self.end == other.end:
+        if self.text == other.text:
             return True
         else:
             return False

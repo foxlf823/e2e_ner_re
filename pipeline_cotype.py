@@ -41,9 +41,13 @@ if not os.path.exists(opt.re_dir):
 
 if opt.whattodo==1:
     # preprocess_cotype.statDataset(train_file, test_file)
+    if opt.word_emb != 'no':
+        data.word_emb_dir = opt.word_emb
 
-    # preprocess_cotype.preprocess(train_file)
-    # preprocess_cotype.preprocess(test_file)
+    # preprocess_cotype.preprocess(data, train_file, "train")
+    # preprocess_cotype.preprocess(data, test_file, "test")
+    #
+    # exit(0)
 
     # ner
     # generate crf++ style data
@@ -51,6 +55,7 @@ if opt.whattodo==1:
     # preprocess_cotype.generateData(train_token, train_entity, train_name, train_ner_file)
     test_token, test_entity, test_relation, test_name = preprocess_cotype.loadPreprocessData(test_file)
     # preprocess_cotype.generateData(test_token, test_entity, test_name, test_ner_file)
+    # exit(0)
 
     # build alphabet
     data.initial_feature_alphabets(train_ner_file)
@@ -88,6 +93,7 @@ elif opt.whattodo==2:
     data.max_epoch = opt.re_iter
     data.HP_gpu = opt.gpu
     data.unk_ratio = opt.unk_ratio
+    data.tune_wordemb = opt.tune_wordemb
     data.show_data_summary()
 
     if opt.shared == 'hard':
