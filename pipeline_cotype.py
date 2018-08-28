@@ -11,6 +11,8 @@ from utils.data import data
 import preprocess_cotype
 import train_cotype
 import test_cotype
+import shared_reg
+import shared_stitch
 
 
 logger = logging.getLogger()
@@ -44,17 +46,17 @@ if opt.whattodo==1:
     if opt.word_emb != 'no':
         data.word_emb_dir = opt.word_emb
 
-    # preprocess_cotype.preprocess(data, train_file, "train")
-    # preprocess_cotype.preprocess(data, test_file, "test")
+    preprocess_cotype.preprocess(data, train_file, "train")
+    preprocess_cotype.preprocess(data, test_file, "test")
     #
     # exit(0)
 
     # ner
     # generate crf++ style data
     train_token, train_entity, train_relation, train_name = preprocess_cotype.loadPreprocessData(train_file)
-    # preprocess_cotype.generateData(train_token, train_entity, train_name, train_ner_file)
+    preprocess_cotype.generateData(train_token, train_entity, train_name, train_ner_file)
     test_token, test_entity, test_relation, test_name = preprocess_cotype.loadPreprocessData(test_file)
-    # preprocess_cotype.generateData(test_token, test_entity, test_name, test_ner_file)
+    preprocess_cotype.generateData(test_token, test_entity, test_name, test_ner_file)
     # exit(0)
 
     # build alphabet
@@ -98,6 +100,10 @@ elif opt.whattodo==2:
 
     if opt.shared == 'hard':
         train_cotype.hard(data, opt.ner_dir, opt.re_dir)
+    elif opt.shared == 'reg':
+        shared_reg.train(data, opt.ner_dir, opt.re_dir)
+    elif opt.shared == 'stitch':
+        shared_stitch.train(data, opt.ner_dir, opt.re_dir)
     else:
 
         train_cotype.pipeline(data, opt.ner_dir, opt.re_dir)
@@ -106,5 +112,9 @@ elif opt.whattodo==3:
 
     if opt.shared == 'hard':
         test_cotype.hard(data, opt, test_file)
+    elif opt.shared == 'reg':
+        shared_reg.test_use_cotype(data, opt, test_file)
+    elif opt.shared == 'stitch':
+        shared_stitch.test_use_cotype(data, opt, test_file)
     else:
         test_cotype.pipeline(data, opt, test_file)

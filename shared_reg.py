@@ -23,6 +23,8 @@ from tqdm import tqdm
 from data_structure import *
 from model.charcnn import CharCNN
 from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
+import test_cotype
+import preprocess_cotype
 
 class WordRep(nn.Module):
     def __init__(self, data, use_position, use_cap, use_postag, use_char):
@@ -882,6 +884,194 @@ def re_evaluateWhenTest(wordrep, hiddenlist, model, instances, data, test_other,
             if relation_type == '</unk>':
                 continue
             elif relation_extraction.relationConstraint1(relation_type, former.type, latter.type) == False:
+                continue
+            else:
+                relation = Relation()
+                relation.create(str(relation_id), relation_type, former, latter)
+                relations.append(relation)
+
+                relation_id += 1
+
+    return relations
+
+
+def test_use_cotype(data, opt, test_file):
+    test_token, test_entity, test_relation, test_name = preprocess_cotype.loadPreprocessData(test_file)
+
+    # evaluate on test data and output results in bioc format, one doc one file
+
+    data.load(opt.data_file)
+    data.MAX_SENTENCE_LENGTH = -1
+    data.show_data_summary()
+
+    data.fix_alphabet()
+    seq_model = SeqModel(data)
+    seq_model.load_state_dict(torch.load(os.path.join(opt.ner_dir, 'model.pkl')))
+    ner_hiddenlist = []
+    for i in range(opt.hidden_num):
+        if i == 0:
+            input_size = data.word_emb_dim+data.HP_char_hidden_dim+data.feature_emb_dims[data.feature_name2id['[Cap]']]+ \
+                         data.feature_emb_dims[data.feature_name2id['[POS]']]
+            output_size = data.HP_hidden_dim
+        else:
+            input_size = data.HP_hidden_dim
+            output_size = data.HP_hidden_dim
+
+        temp = HiddenLayer(data, input_size, output_size)
+        temp.load_state_dict(torch.load(os.path.join(opt.ner_dir, 'hidden_{}.pkl'.format(i))))
+        ner_hiddenlist.append(temp)
+
+    ner_wordrep = WordRep(data, False, True, True, data.use_char)
+    ner_wordrep.load_state_dict(torch.load(os.path.join(opt.ner_dir, 'wordrep.pkl')))
+
+    classify_model = ClassifyModel(data)
+    classify_model.load_state_dict(torch.load(os.path.join(opt.re_dir, 'model.pkl')))
+    re_hiddenlist = []
+    for i in range(opt.hidden_num):
+        if i==0:
+            input_size = data.word_emb_dim + data.feature_emb_dims[data.feature_name2id['[POS]']]+\
+                         2*data.re_feature_emb_dims[data.re_feature_name2id['[POSITION]']]
+            output_size = data.HP_hidden_dim
+        else:
+            input_size = data.HP_hidden_dim
+            output_size = data.HP_hidden_dim
+
+        temp = HiddenLayer(data, input_size, output_size)
+        temp.load_state_dict(torch.load(os.path.join(opt.re_dir, 'hidden_{}.pkl'.format(i))))
+        re_hiddenlist.append(temp)
+
+    re_wordrep = WordRep(data, True, False, True, False)
+    re_wordrep.load_state_dict(torch.load(os.path.join(opt.re_dir, 'wordrep.pkl')))
+
+    total_ner = 0
+    correct_ner = 0
+    predict_ner = 0
+
+    total_re = 0
+    correct_re = 0
+    predict_re = 0
+
+    for i in tqdm(range(len(test_name))):
+        doc_name = test_name[i]
+        doc_token = test_token[i]
+        doc_entity = test_entity[i]
+        doc_relation = test_relation[i]
+
+        if opt.use_gold_ner:
+            entities = []
+            for _, e in doc_entity.iterrows():
+                entity = Entity()
+                entity.create(e['id'], e['type'], e['start'], e['end'], e['text'], e['sent_idx'], e['tf_start'], e['tf_end'])
+                entities.append(entity)
+        else:
+
+            ncrf_data = test_cotype.generateDataForOneDoc(doc_token, doc_entity)
+
+            data.raw_texts, data.raw_Ids = ner.read_instanceFromBuffer(ncrf_data, data.word_alphabet, data.char_alphabet,
+                                                         data.feature_alphabets, data.label_alphabet, data.number_normalized,
+                                                         data.MAX_SENTENCE_LENGTH)
+
+
+            decode_results = ner_evaluateWhenTest(data, ner_wordrep, ner_hiddenlist, seq_model)
+
+
+            entities = test_cotype.translateNCRFPPintoEntities(doc_token, decode_results, doc_name)
+
+
+        test_X, test_other = test_cotype.getRelationInstanceForOneDoc(doc_token, entities, doc_name, data)
+
+        relations = re_evaluateWhenTest_cotype(re_wordrep, re_hiddenlist, classify_model, test_X, data, test_other, data.re_feature_alphabets[data.re_feature_name2id['[RELATION]']])
+
+        # evaluation
+        predict_ner += len(entities)
+        total_ner += doc_entity.shape[0]
+        for predict in entities:
+            for _, gold in doc_entity.iterrows():
+                if gold['type'] == predict.type and gold['start'] == predict.start and gold['end'] == predict.end:
+                    correct_ner += 1
+                    break
+
+        predict_re += len(relations)
+        gold_relations = []
+        for _, gold in doc_relation.iterrows():
+            if gold['type'] == 'None':  # we don't count None relations
+                continue
+            gold_relation = Relation()
+            gold_relation.type = gold['type']
+            node1 = Entity()
+            node1.text = gold['entity1_text']
+            gold_relation.node1 = node1
+            node2 = Entity()
+            node2.text = gold['entity2_text']
+            gold_relation.node2 = node2
+
+            gold_relations.append(gold_relation)
+
+        total_re += len(gold_relations)
+
+        for predict in relations:
+            for gold in gold_relations:
+                if predict.equals_cotype(gold):
+                    correct_re += 1
+                    break
+
+    ner_p = correct_ner * 1.0 / predict_ner
+    ner_r = correct_ner * 1.0 / total_ner
+    ner_f1 = 2.0 * ner_p * ner_r / (ner_p + ner_r)
+    print("NER p: %.4f | r: %.4f | f1: %.4f" % (ner_p, ner_r, ner_f1))
+
+    re_p = correct_re * 1.0 / predict_re
+    re_r = correct_re * 1.0 / total_re
+    re_f1 = 2.0 * re_p * re_r / (re_p + re_r)
+    print("RE p: %.4f | r: %.4f | f1: %.4f" % (re_p, re_r, re_f1))
+
+def re_evaluateWhenTest_cotype(wordrep, hiddenlist, model, instances, data, test_other, relationVocab):
+    wordrep.eval()
+    for hidden in hiddenlist:
+        hidden.eval()
+    model.eval()
+    batch_size = data.HP_batch_size
+
+    relations = []
+    relation_id = 1
+
+    train_num = len(instances)
+    total_batch = train_num//batch_size+1
+    for batch_id in range(total_batch):
+        start = batch_id*batch_size
+        end = (batch_id+1)*batch_size
+        if end > train_num:
+            end = train_num
+        instance = instances[start:end]
+        if not instance:
+            continue
+
+        [batch_word, batch_features, batch_wordlen, batch_wordrecover, \
+         batch_char, batch_charlen, batch_charrecover, \
+         position1_seq_tensor, position2_seq_tensor, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, \
+         tok_num_betw, et_num], [targets, targets_permute] = my_utils.sorted_collate1(instance)
+
+        with torch.no_grad():
+            re_word_rep = wordrep.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
+                                             batch_charrecover, position1_seq_tensor, position2_seq_tensor)
+
+            re_hidden = re_word_rep
+            for i in range(opt.hidden_num):
+                re_hidden = hiddenlist[i].forward(re_hidden, batch_wordlen)
+
+
+            pred = model.forward(re_hidden, batch_wordlen, e1_token, e1_length, e2_token, e2_length, e1_type, e2_type, tok_num_betw, et_num)
+
+            pred = pred.index_select(0, batch_wordrecover)
+
+
+        for i in range(start,end):
+
+            former = test_other[i][0]
+            latter = test_other[i][1]
+
+            relation_type = relationVocab.get_instance(pred[i-start].item())
+            if relation_type == '</unk>':
                 continue
             else:
                 relation = Relation()

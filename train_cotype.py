@@ -48,9 +48,9 @@ def pipeline(data, ner_dir, re_dir):
 
 
     iter_parameter = itertools.chain(*map(list, [seq_wordseq.parameters(), seq_model.parameters()]))
-    seq_optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+    seq_optimizer = optim.Adam(iter_parameter, lr=opt.ner_lr, weight_decay=data.HP_l2)
     iter_parameter = itertools.chain(*map(list, [classify_wordseq.parameters(), classify_model.parameters()]))
-    classify_optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+    classify_optimizer = optim.Adam(iter_parameter, lr=opt.re_lr, weight_decay=data.HP_l2)
 
 
 
@@ -119,8 +119,6 @@ def pipeline(data, ner_dir, re_dir):
                 batch_word, batch_features, batch_wordlen, batch_wordrecover, batch_char, batch_charlen, batch_charrecover, batch_label, mask, \
                     batch_permute_label = batchify_with_label(instance, data.HP_gpu)
 
-                seq_wordseq.unfreeze_net()
-                seq_model.unfreeze_net()
                 hidden = seq_wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
                                              batch_charrecover, None, None)
                 hidden_adv = None
@@ -138,9 +136,6 @@ def pipeline(data, ner_dir, re_dir):
                  tok_num_betw, et_num], [targets, targets_permute] = my_utils.endless_get_next_batch_without_rebatch1(
                     re_train_loader, re_train_iter)
 
-
-                classify_wordseq.unfreeze_net()
-                classify_model.unfreeze_net()
                 hidden = classify_wordseq.forward(batch_word, batch_features, batch_wordlen, batch_char, batch_charlen,
                                                   batch_charrecover, position1_seq_tensor, position2_seq_tensor)
                 hidden_adv = None
@@ -175,6 +170,21 @@ def pipeline(data, ner_dir, re_dir):
             torch.save(classify_model.state_dict(), os.path.join(re_dir, 'model.pkl'))
 
 
+        # if ner_score > best_ner_score:
+        #     print("new best ner score: %.4f" % (ner_score))
+        #     best_ner_score = ner_score
+        #
+        #     torch.save(seq_wordseq.state_dict(), os.path.join(ner_dir, 'wordseq.pkl'))
+        #     torch.save(seq_model.state_dict(), os.path.join(ner_dir, 'model.pkl'))
+        #
+        #
+        # if re_score > best_re_score:
+        #     print("new best re score: %.4f" % (re_score))
+        #     best_re_score = re_score
+        #
+        #     torch.save(classify_wordseq.state_dict(), os.path.join(re_dir, 'wordseq.pkl'))
+        #     torch.save(classify_model.state_dict(), os.path.join(re_dir, 'model.pkl'))
+
 
 def hard(data, ner_dir, re_dir):
 
@@ -188,9 +198,9 @@ def hard(data, ner_dir, re_dir):
 
 
     iter_parameter = itertools.chain(*map(list, [seq_wordseq.parameters(), wordseq_shared.parameters(), seq_model.parameters()]))
-    seq_optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+    seq_optimizer = optim.Adam(iter_parameter, lr=opt.ner_lr, weight_decay=data.HP_l2)
     iter_parameter = itertools.chain(*map(list, [classify_wordseq.parameters(), wordseq_shared.parameters(), classify_model.parameters()]))
-    classify_optimizer = optim.Adam(iter_parameter, lr=data.HP_lr, weight_decay=data.HP_l2)
+    classify_optimizer = optim.Adam(iter_parameter, lr=opt.re_lr, weight_decay=data.HP_l2)
 
 
 

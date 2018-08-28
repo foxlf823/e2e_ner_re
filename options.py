@@ -23,7 +23,8 @@ parser.add_argument('-lamda', type=float, default=0.001)
 parser.add_argument('-att_size', type=int, default=50)
 parser.add_argument('-word_emb', default='no')
 parser.add_argument('-tune_wordemb', action='store_true', default=False)
-
+parser.add_argument('-ner_lr', type=float, default=0.001)
+parser.add_argument('-re_lr', type=float, default=0.001)
 
 opt = parser.parse_args()
 
